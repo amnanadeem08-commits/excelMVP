@@ -21,20 +21,20 @@ A professional Streamlit MVP for automated Excel and CSV analytics. The app beha
 
 ```text
 excelMVP/
-├── app.py
-├── README.md
-├── requirements.txt
-├── utils/
-│   ├── __init__.py
-│   ├── analyzer.py
-│   ├── chart_engine.py
-│   ├── data_cleaner.py
-│   ├── helpers.py
-│   ├── insight_engine.py
-│   └── pivot_engine.py
-├── reports/
-├── uploads/
-└── assets/
+|-- app.py
+|-- README.md
+|-- requirements.txt
+|-- utils/
+|   |-- __init__.py
+|   |-- analyzer.py
+|   |-- chart_engine.py
+|   |-- data_cleaner.py
+|   |-- helpers.py
+|   |-- insight_engine.py
+|   `-- pivot_engine.py
+|-- reports/
+|-- uploads/
+`-- assets/
 ```
 
 ## Requirements
@@ -113,6 +113,24 @@ GitHub does not run Streamlit apps directly from the repository page. To give us
 6. Deploy the app.
 
 After deployment, Streamlit Cloud provides a public app URL.
+
+## Streamlit Cloud Deployment Checklist
+
+Make sure these files and folders exist in the GitHub repository before deploying:
+
+```text
+app.py
+requirements.txt
+utils/__init__.py
+utils/analyzer.py
+utils/chart_engine.py
+utils/data_cleaner.py
+utils/helpers.py
+utils/insight_engine.py
+utils/pivot_engine.py
+```
+
+If Streamlit Cloud shows `ModuleNotFoundError` at `from utils.analyzer import ...`, the `utils/` folder was not uploaded or the app was deployed from the wrong repository/folder. Push the entire project folder, then reboot the Streamlit Cloud app from **Manage app**.
 
 ## How To Use
 

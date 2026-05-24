@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+import sys
+
 import pandas as pd
 import streamlit as st
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils.analyzer import analyze_dataset, build_kpis
 from utils.chart_engine import generate_charts
