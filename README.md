@@ -116,7 +116,7 @@ After deployment, Streamlit Cloud provides a public app URL.
 
 ## Streamlit Cloud Deployment Checklist
 
-Make sure these files and folders exist in the GitHub repository before deploying:
+The current `app.py` is self-contained for Streamlit Cloud, so the app can run even if only `app.py` and `requirements.txt` are deployed. For the full developer project, keep these files and folders in GitHub:
 
 ```text
 app.py
@@ -130,7 +130,7 @@ utils/insight_engine.py
 utils/pivot_engine.py
 ```
 
-If Streamlit Cloud shows `ModuleNotFoundError` at `from utils.analyzer import ...`, the `utils/` folder was not uploaded or the app was deployed from the wrong repository/folder. Push the entire project folder, then reboot the Streamlit Cloud app from **Manage app**.
+If Streamlit Cloud still shows `ModuleNotFoundError` at `from utils.analyzer import ...`, it is running an older version of `app.py`. Push the latest `app.py`, then reboot the Streamlit Cloud app from **Manage app**.
 
 ## How To Use
 
