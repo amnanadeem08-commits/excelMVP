@@ -121,7 +121,7 @@ def detect_column_types(df: pd.DataFrame) -> dict[str, list[str]]:
                 types["currency"].append(column)
                 continue
 
-        datetime_try = pd.to_datetime(series, errors="coerce", infer_datetime_format=True)
+        datetime_try = pd.to_datetime(series, errors="coerce")
         if datetime_try.notna().mean() >= 0.8:
             types["datetime"].append(column)
             continue
