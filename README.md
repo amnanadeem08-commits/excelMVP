@@ -90,6 +90,30 @@ Then open:
 http://localhost:8510
 ```
 
+## Run From GitHub
+
+After uploading this project to GitHub, anyone can run it locally with:
+
+```powershell
+git clone https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
+cd YOUR_REPOSITORY
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+GitHub does not run Streamlit apps directly from the repository page. To give users a web link that opens the app, deploy it with Streamlit Community Cloud:
+
+1. Push this project to GitHub.
+2. Go to `https://share.streamlit.io`.
+3. Connect your GitHub account.
+4. Select the repository.
+5. Set the main file path to `app.py`.
+6. Deploy the app.
+
+After deployment, Streamlit Cloud provides a public app URL.
+
 ## How To Use
 
 1. Upload an Excel or CSV file from the main page or sidebar.
