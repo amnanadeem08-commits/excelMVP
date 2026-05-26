@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import html
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
@@ -12,7 +13,8 @@ import streamlit as st
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image as RLImage
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
 # ---- Embedded utils/data_cleaner.py ----
@@ -648,6 +650,209 @@ def make_pdf_report(summary: dict, cleaning_report: dict, insights: list[str], r
     return buffer.getvalue()
 
 
+def make_custom_pdf_report(
+    summary: dict,
+    cleaning_report: dict,
+    insights: list[str],
+    recommendations: list[str],
+    pivots: list[PivotTable],
+    charts: list[ChartSpec],
+    include_tables: bool,
+    include_charts: bool,
+) -> bytes:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=32, leftMargin=32, topMargin=32, bottomMargin=32)
+    styles = getSampleStyleSheet()
+    story = [
+        Paragraph("Excel AI Analytics Assistant - Client Report", styles["Title"]),
+        Spacer(1, 12),
+        Paragraph("Executive Summary", styles["Heading2"]),
+        _styled_table(
+            [
+                ["Rows", f"{summary['rows']:,}"],
+                ["Columns", f"{summary['columns']:,}"],
+                ["Data Completeness", f"{100 - summary['missing_pct']:.1f}%"],
+                ["Numeric Fields", f"{summary['numeric_count']:,}"],
+                ["Categorical Fields", f"{summary['categorical_count']:,}"],
+            ]
+        ),
+        Spacer(1, 12),
+        Paragraph("Cleaning Report", styles["Heading2"]),
+        _styled_table([[key.replace("_", " ").title(), str(value)] for key, value in cleaning_report.items()]),
+        Spacer(1, 12),
+        Paragraph("AI Insights", styles["Heading2"]),
+    ]
+
+    for insight in insights[:8]:
+        story.append(Paragraph(f"- {html.escape(insight)}", styles["BodyText"]))
+        story.append(Spacer(1, 4))
+
+    story.extend([Spacer(1, 8), Paragraph("Recommendations", styles["Heading2"])])
+    for recommendation in recommendations[:8]:
+        story.append(Paragraph(f"- {html.escape(recommendation)}", styles["BodyText"]))
+        story.append(Spacer(1, 4))
+
+    if include_tables and pivots:
+        story.append(PageBreak())
+        story.append(Paragraph("Pivot Tables", styles["Heading1"]))
+        for pivot in pivots[:6]:
+            story.append(Spacer(1, 8))
+            story.append(Paragraph(html.escape(pivot.title), styles["Heading2"]))
+            story.append(_dataframe_pdf_table(pivot.data.head(12)))
+
+    if include_charts and charts:
+        story.append(PageBreak())
+        story.append(Paragraph("Visual Analytics", styles["Heading1"]))
+        for chart in charts[:6]:
+            image_bytes = _chart_png_bytes(chart)
+            if image_bytes is None:
+                continue
+            story.append(Spacer(1, 8))
+            story.append(Paragraph(html.escape(chart.title), styles["Heading2"]))
+            story.append(RLImage(BytesIO(image_bytes), width=520, height=300))
+
+    doc.build(story)
+    return buffer.getvalue()
+
+
+def make_ppt_report(
+    summary: dict,
+    cleaning_report: dict,
+    insights: list[str],
+    recommendations: list[str],
+    pivots: list[PivotTable],
+    charts: list[ChartSpec],
+    include_tables: bool,
+    include_charts: bool,
+) -> bytes:
+    from pptx import Presentation
+    from pptx.dml.color import RGBColor
+    from pptx.enum.text import PP_ALIGN
+    from pptx.util import Inches, Pt
+
+    prs = Presentation()
+    prs.slide_width = Inches(13.333)
+    prs.slide_height = Inches(7.5)
+
+    def add_title(slide, title: str, subtitle: str = ""):
+        box = slide.shapes.add_textbox(Inches(0.55), Inches(0.28), Inches(12.2), Inches(0.75))
+        p = box.text_frame.paragraphs[0]
+        p.text = title
+        p.font.size = Pt(26)
+        p.font.bold = True
+        p.font.color.rgb = RGBColor(23, 32, 51)
+        if subtitle:
+            sub = slide.shapes.add_textbox(Inches(0.58), Inches(0.92), Inches(11.8), Inches(0.35))
+            sp = sub.text_frame.paragraphs[0]
+            sp.text = subtitle
+            sp.font.size = Pt(11)
+            sp.font.color.rgb = RGBColor(102, 112, 133)
+
+    def add_bullets(slide, x, y, w, h, title: str, items: list[str]):
+        title_box = slide.shapes.add_textbox(x, y, w, Inches(0.35))
+        tp = title_box.text_frame.paragraphs[0]
+        tp.text = title
+        tp.font.bold = True
+        tp.font.size = Pt(15)
+        body = slide.shapes.add_textbox(x, y + Inches(0.42), w, h - Inches(0.42))
+        tf = body.text_frame
+        tf.word_wrap = True
+        for idx, item in enumerate(items[:7]):
+            p = tf.paragraphs[0] if idx == 0 else tf.add_paragraph()
+            p.text = item
+            p.level = 0
+            p.font.size = Pt(12)
+            p.font.color.rgb = RGBColor(45, 55, 72)
+
+    def add_df_table(slide, df: pd.DataFrame, x, y, w, h):
+        table_df = df.head(8).iloc[:, :5].copy()
+        rows, cols = table_df.shape[0] + 1, max(table_df.shape[1], 1)
+        table = slide.shapes.add_table(rows, cols, x, y, w, h).table
+        for col_idx, col in enumerate(table_df.columns):
+            cell = table.cell(0, col_idx)
+            cell.text = str(col)[:28]
+            cell.fill.solid()
+            cell.fill.fore_color.rgb = RGBColor(238, 244, 255)
+            for paragraph in cell.text_frame.paragraphs:
+                paragraph.font.bold = True
+                paragraph.font.size = Pt(8)
+        for row_idx, (_, row) in enumerate(table_df.iterrows(), start=1):
+            for col_idx, value in enumerate(row):
+                cell = table.cell(row_idx, col_idx)
+                cell.text = str(value)[:40]
+                for paragraph in cell.text_frame.paragraphs:
+                    paragraph.font.size = Pt(7)
+                    paragraph.alignment = PP_ALIGN.LEFT
+
+    title_slide = prs.slides.add_slide(prs.slide_layouts[6])
+    add_title(title_slide, "Excel AI Analytics Assistant", "Client-ready analytics export")
+    add_bullets(
+        title_slide,
+        Inches(0.75),
+        Inches(1.75),
+        Inches(5.7),
+        Inches(4.5),
+        "Executive highlights",
+        [
+            f"{summary['rows']:,} records analyzed across {summary['columns']:,} columns.",
+            f"Data completeness score: {100 - summary['missing_pct']:.1f}%.",
+            f"{summary['numeric_count']:,} numeric fields and {summary['categorical_count']:,} segment fields detected.",
+        ],
+    )
+    add_bullets(title_slide, Inches(6.8), Inches(1.75), Inches(5.8), Inches(4.5), "AI recommendations", recommendations)
+
+    insight_slide = prs.slides.add_slide(prs.slide_layouts[6])
+    add_title(insight_slide, "AI Insights", "Business-friendly findings generated from the uploaded dataset")
+    add_bullets(insight_slide, Inches(0.75), Inches(1.35), Inches(11.8), Inches(5.5), "Detected insights", insights)
+
+    if include_tables:
+        for pivot in pivots[:5]:
+            slide = prs.slides.add_slide(prs.slide_layouts[6])
+            add_title(slide, pivot.title, "Top rows from the automatically generated pivot table")
+            add_df_table(slide, pivot.data, Inches(0.65), Inches(1.35), Inches(12.1), Inches(5.55))
+
+    if include_charts:
+        for chart in charts[:6]:
+            image_bytes = _chart_png_bytes(chart)
+            if image_bytes is None:
+                continue
+            slide = prs.slides.add_slide(prs.slide_layouts[6])
+            add_title(slide, chart.title, "Interactive dashboard chart exported as a presentation visual")
+            slide.shapes.add_picture(BytesIO(image_bytes), Inches(0.75), Inches(1.25), width=Inches(11.85))
+
+    output = BytesIO()
+    prs.save(output)
+    return output.getvalue()
+
+
+def _chart_png_bytes(chart: ChartSpec) -> bytes | None:
+    try:
+        return chart.figure.to_image(format="png", width=1200, height=700, scale=2)
+    except Exception:
+        return None
+
+
+def _dataframe_pdf_table(df: pd.DataFrame) -> Table:
+    limited = df.head(12).iloc[:, :6].copy()
+    rows = [[str(col)[:24] for col in limited.columns]]
+    for _, row in limited.iterrows():
+        rows.append([str(value)[:34] for value in row])
+    table = Table(rows, repeatRows=1)
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EEF4FF")),
+                ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor("#172033")),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#D0D5DD")),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 7),
+                ("PADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    return table
+
+
 def _styled_table(rows: list[list[str]]) -> Table:
     table = Table(rows, hAlign="LEFT", colWidths=[180, 300])
     table.setStyle(
@@ -956,9 +1161,37 @@ def main() -> None:
         st.markdown('<div class="section-title">Download Reports</div>', unsafe_allow_html=True)
         excel_bytes = dataframe_to_excel(cleaned_df, pivots)
         csv_bytes = dataframe_to_csv(cleaned_df)
-        pdf_bytes = make_pdf_report(summary, cleaning_report, insights, recommendations)
 
-        d1, d2, d3 = st.columns(3)
+        report_mode = st.radio(
+            "Client report content",
+            options=["Summary only", "Tables", "Charts", "Tables + Charts"],
+            index=3,
+            horizontal=True,
+        )
+        include_tables = report_mode in {"Tables", "Tables + Charts"}
+        include_charts = report_mode in {"Charts", "Tables + Charts"}
+        pdf_bytes = make_custom_pdf_report(
+            summary,
+            cleaning_report,
+            insights,
+            recommendations,
+            pivots,
+            charts,
+            include_tables,
+            include_charts,
+        )
+        ppt_bytes = make_ppt_report(
+            summary,
+            cleaning_report,
+            insights,
+            recommendations,
+            pivots,
+            charts,
+            include_tables,
+            include_charts,
+        )
+
+        d1, d2, d3, d4 = st.columns(4)
         with d1:
             st.download_button(
                 "Cleaned Excel",
@@ -969,9 +1202,16 @@ def main() -> None:
         with d2:
             st.download_button("Cleaned CSV", csv_bytes, file_name="cleaned_dataset.csv", mime="text/csv")
         with d3:
-            st.download_button("PDF Summary", pdf_bytes, file_name="executive_summary.pdf", mime="application/pdf")
+            st.download_button("Client PDF", pdf_bytes, file_name="client_analytics_report.pdf", mime="application/pdf")
+        with d4:
+            st.download_button(
+                "Client PPT",
+                ppt_bytes,
+                file_name="client_analytics_deck.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            )
 
-        st.caption("Chart PNG export is available from each Plotly chart toolbar using the camera icon.")
+        st.caption("Choose whether the client deliverable includes pivot tables, graph charts, both, or summary only.")
 
 
 if __name__ == "__main__":

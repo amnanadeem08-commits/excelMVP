@@ -16,6 +16,7 @@ A professional Streamlit MVP for automated Excel and CSV analytics. The app beha
 - AI-style business insights and recommendations
 - Sidebar filters for categories and date ranges
 - Export cleaned Excel, cleaned CSV, pivot tables, and PDF summary report
+- Client-controlled PDF and PowerPoint exports with summary, tables, charts, or tables plus charts
 
 ## Project Structure
 
@@ -139,7 +140,8 @@ If Streamlit Cloud still shows `ModuleNotFoundError` at `from utils.analyzer imp
 3. Review the dataset preview and cleaning report.
 4. Use sidebar filters to focus the analysis.
 5. Open the executive summary, charts, pivots, and insights tabs.
-6. Download cleaned datasets, pivot tables, or the PDF summary report.
+6. In Downloads, choose the client report content: summary only, tables, charts, or tables plus charts.
+7. Download cleaned datasets, pivot tables, a client PDF report, or a client PowerPoint deck.
 
 ## Core Modules
 
