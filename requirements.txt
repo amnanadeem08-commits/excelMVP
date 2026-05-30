@@ -9,3 +9,5 @@ scipy>=1.13.0
 kaleido>=0.2.1
 reportlab>=4.2.0
 python-pptx>=0.6.23
+# Optional: enables LLM-written narratives in ai_insights.py when OPENAI_API_KEY is set.
+# openai>=1.30.0

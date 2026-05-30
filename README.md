@@ -1,159 +1,120 @@
-# Excel AI Analytics Assistant
+# Excel Automation & AI Reporting Tool
 
-A professional Streamlit MVP for automated Excel and CSV analytics. The app behaves like a lightweight AI-powered Excel assistant: upload a spreadsheet, clean the data, generate executive KPIs, build pivot tables, create Plotly charts, and export analysis-ready reports.
+A freelance-ready, Python-based tool that automates the work a client would normally do by hand in Excel. Upload a spreadsheet and the app reads it, cleans and structures the data, generates pivot-table analytics and KPIs, builds an interactive dashboard, surfaces AI-style insights, and exports client-ready Excel, PDF, and PowerPoint reports.
+
+Built for real freelance use cases: small-business reporting, sales analysis dashboards, and HR/finance Excel automation jobs on Fiverr/Upwork.
 
 ## Features
 
+### 1. Excel input system
 - Upload `.xlsx`, `.xls`, and `.csv` files
-- Excel sheet selector
-- Dataset preview, shape, and column profiling
-- Smart data type detection for numeric, categorical, boolean, datetime, currency, and percentage columns
-- Automated data cleaning for missing values, duplicate rows, empty columns, whitespace, invalid dates, and outliers
-- Executive summary and KPI cards
-- Automatic statistical analysis and correlation matrix
-- Smart pivot table generation
-- Interactive Plotly charts
-- AI-style business insights and recommendations
-- Sidebar filters for categories and date ranges
-- Export cleaned Excel, cleaned CSV, pivot tables, and PDF summary report
-- Client-controlled PDF and PowerPoint exports with summary, tables, charts, or tables plus charts
+- Multi-sheet Excel support with a sheet selector
+- Automatic structure detection (rows, columns, column roles, missing values)
+
+### 2. Data cleaning engine (pandas)
+- Standardizes column names (trim, de-duplicate)
+- Removes duplicate rows and fully empty columns
+- Handles missing values intelligently (median for numbers, mode for categories, fill for dates)
+- Detects date / number / text / currency / percentage / boolean columns and fixes their types
+- Caps extreme outliers and returns a transparent cleaning report
+
+### 3. Automation layer
+- Auto-generates pivot-table equivalents using pandas `groupby` (by category and by month)
+- Auto-calculates KPIs: total, average, growth %, and top categories
+
+### 4. Dashboard module (Streamlit + Plotly)
+- KPI cards (Total, Average, Growth %, Data Quality)
+- Bar charts (top categories/products) and pie share charts
+- Line charts (trends over time)
+- Distribution, scatter, and correlation visuals
+- Sidebar filters for category and date range
+
+### 5. Export system
+- Cleaned dataset to Excel and CSV
+- Structured multi-sheet Excel summary report (overview, KPIs, cleaning, insights, recommendations, pivots)
+- High-resolution chart images embedded into deliverables
+- Branded client PDF report and PowerPoint deck
+
+### 6. AI insight layer (the "brain")
+`generate_ai_insights(df)` turns cleaned data into a structured, client-ready report:
+1. **Dataset Summary** - auto-detects the dataset type (sales, finance, HR, inventory, marketing) and explains what it represents in plain business language.
+2. **Key Insights** - top/worst performing category or product, trend (growth/decline), and key patterns.
+3. **Problems / Anomalies** - unusual spikes/drops vs. the average trend, abnormal values, and missing-data patterns (e.g. "Sales dropped by 35% in March compared to the average trend").
+4. **Recommendations** - 3-5 actionable suggestions (e.g. "Focus marketing on Product A as it contributes 42% of total revenue").
+
+Rule-based by default so it works offline with any Excel file; optionally upgrades to an LLM when `OPENAI_API_KEY` is set (see below). The pipeline builds a pandas summary, converts it to a structured prompt, sends it to the LLM (OpenAI/Claude placeholder), and returns the four sections.
 
 ## Project Structure
 
 ```text
 excelMVP/
-|-- app.py
-|-- README.md
+|-- app.py                # Streamlit UI (thin orchestration layer)
+|-- data_loader.py        # File input, multi-sheet, structure detection
+|-- data_cleaning.py      # Pandas cleaning engine + column type detection
+|-- analytics_engine.py   # Pivot automation, KPIs, growth calculations
+|-- dashboard.py          # Plotly charts, KPI cards, filters, styling
+|-- ai_insights.py        # Business-language explanation, insights, AI stub
+|-- export_module.py      # Excel / CSV / summary / PDF / PPT exports
 |-- requirements.txt
-|-- utils/
-|   |-- __init__.py
-|   |-- analyzer.py
-|   |-- chart_engine.py
-|   |-- data_cleaner.py
-|   |-- helpers.py
-|   |-- insight_engine.py
-|   `-- pivot_engine.py
-|-- reports/
-|-- uploads/
-`-- assets/
+|-- README.md
+|-- reports/  uploads/  assets/
 ```
-
-## Requirements
-
-- Python 3.10 or newer
-- Streamlit
-- pandas
-- numpy
-- Plotly
-- openpyxl
-- xlrd
-- scikit-learn
-- scipy
-- kaleido
-- reportlab
 
 ## Setup
 
-Open a terminal in the project folder:
-
 ```powershell
 cd D:\excelMVP
-```
-
-Create and activate a virtual environment:
-
-```powershell
 python -m venv .venv
 .\.venv\Scripts\activate
-```
-
-Install dependencies:
-
-```powershell
 pip install -r requirements.txt
 ```
 
-## Run The App
+## Run
 
 ```powershell
 streamlit run app.py
 ```
 
-If you want to use the same local port used during development:
-
-```powershell
-streamlit run app.py --server.port 8510
-```
-
-Then open:
-
-```text
-http://localhost:8510
-```
-
-## Run From GitHub
-
-After uploading this project to GitHub, anyone can run it locally with:
-
-```powershell
-git clone https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
-cd YOUR_REPOSITORY
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-GitHub does not run Streamlit apps directly from the repository page. To give users a web link that opens the app, deploy it with Streamlit Community Cloud:
-
-1. Push this project to GitHub.
-2. Go to `https://share.streamlit.io`.
-3. Connect your GitHub account.
-4. Select the repository.
-5. Set the main file path to `app.py`.
-6. Deploy the app.
-
-After deployment, Streamlit Cloud provides a public app URL.
-
-## Streamlit Cloud Deployment Checklist
-
-The current `app.py` is self-contained for Streamlit Cloud, so the app can run even if only `app.py` and `requirements.txt` are deployed. For the full developer project, keep these files and folders in GitHub:
-
-```text
-app.py
-requirements.txt
-utils/__init__.py
-utils/analyzer.py
-utils/chart_engine.py
-utils/data_cleaner.py
-utils/helpers.py
-utils/insight_engine.py
-utils/pivot_engine.py
-```
-
-If Streamlit Cloud still shows `ModuleNotFoundError` at `from utils.analyzer import ...`, it is running an older version of `app.py`. Push the latest `app.py`, then reboot the Streamlit Cloud app from **Manage app**.
+Then open the URL Streamlit prints (default `http://localhost:8501`).
 
 ## How To Use
 
-1. Upload an Excel or CSV file from the main page or sidebar.
-2. If the file is Excel, choose the workbook sheet.
-3. Review the dataset preview and cleaning report.
-4. Use sidebar filters to focus the analysis.
-5. Open the executive summary, charts, pivots, and insights tabs.
-6. In Downloads, choose the client report content: summary only, tables, charts, or tables plus charts.
-7. Download cleaned datasets, pivot tables, a client PDF report, or a client PowerPoint deck.
+1. Upload an Excel or CSV file from the sidebar or main page.
+2. For multi-sheet Excel files, pick the sheet to analyze.
+3. Review the dataset preview, detected column types, and cleaning report.
+4. Use the sidebar filters to slice by category and date.
+5. Explore the Executive Summary, Dashboard, Pivot Tables, and AI Insights tabs.
+6. In Downloads, choose the report content (summary only / tables / charts / both) and download the cleaned data, the Excel summary report, the client PDF, or the PowerPoint deck.
 
-## Core Modules
+## Optional: Enable real AI narratives
 
-- `utils/data_cleaner.py`: data type detection and automated cleaning
-- `utils/analyzer.py`: executive summary, KPIs, statistics, and correlations
-- `utils/pivot_engine.py`: automatic pivot table creation
-- `utils/chart_engine.py`: smart Plotly chart generation
-- `utils/insight_engine.py`: business insights and recommendations
-- `utils/helpers.py`: file reading, exports, PDF generation, and UI helpers
+The app works fully offline with a rule-based insight engine. To enable LLM-written explanations:
+
+1. `pip install openai` (or uncomment it in `requirements.txt`).
+2. Set an environment variable before running:
+
+```powershell
+$env:OPENAI_API_KEY = "your-key"
+streamlit run app.py
+```
+
+If the key or package is missing, the app silently falls back to the rule-based engine, so it never breaks.
+
+## Customization Notes (for freelance jobs)
+
+- **Branding:** Change titles/colors in `export_module.py` (PDF/PPT theme) and `dashboard.py` (`inject_styles`).
+- **Cleaning behavior:** Tune missing-value strategy and outlier sensitivity in `data_cleaning.py`.
+- **Primary metric:** Adjust `PRIORITY_METRIC_WORDS` in `analytics_engine.py` to control which column drives KPIs.
+- **Charts:** Add chart types in `dashboard.py` (`generate_charts`).
+
+## Deployment (Streamlit Community Cloud)
+
+1. Push the project to GitHub.
+2. Go to `https://share.streamlit.io` and connect your repo.
+3. Set the main file path to `app.py` and deploy.
 
 ## Notes
 
-- The app avoids Plotly OLS trendlines so it does not require `statsmodels`.
-- Chart PNG export is available from each Plotly chart toolbar.
-- The MVP is designed for exploratory business analytics and executive reporting, not regulated financial or medical decision-making.
+- Charts avoid Plotly OLS trendlines, so `statsmodels` is not required.
+- Chart image export requires `kaleido` (already in `requirements.txt`).
+- The tool is designed for exploratory business analytics and executive reporting, not regulated financial or medical decision-making.
