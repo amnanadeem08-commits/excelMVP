@@ -1,5 +1,7 @@
 # Excel Automation & AI Reporting Tool
 
+**GitHub:** https://github.com/amnanadeem08-commits/excelMVP
+
 A freelance-ready, Python-based tool that automates the work a client would normally do by hand in Excel. Upload a spreadsheet and the app reads it, cleans and structures the data, generates pivot-table analytics and KPIs, builds an interactive dashboard, surfaces AI-style insights, and exports client-ready Excel, PDF, and PowerPoint reports.
 
 Built for real freelance use cases: small-business reporting, sales analysis dashboards, and HR/finance Excel automation jobs on Fiverr/Upwork.

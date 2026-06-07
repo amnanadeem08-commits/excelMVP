@@ -1,13 +1,16 @@
-"""Generate an introductory PowerPoint presentation for the project.
+"""Generate a LinkedIn-ready portfolio PowerPoint for the project.
 
-Builds a client/portfolio-ready deck that introduces the Excel Automation &
-AI Reporting Tool and explains how it works end to end.
+Builds a shareable deck for GitHub, LinkedIn posts, and freelance portfolios.
+Includes the live repo link and a ready-to-copy LinkedIn caption.
 
 Run:  py make_intro_deck.py
-Output:  Excel_Automation_AI_Tool_Presentation.pptx
+Output:  Excel_MVP_LinkedIn_Portfolio.pptx
 """
 
 from __future__ import annotations
+
+GITHUB_URL = "https://github.com/amnanadeem08-commits/excelMVP"
+LINKEDIN_HASHTAGS = "#Python #DataAnalytics #ExcelAutomation #Streamlit #AI #Freelance #OpenSource"
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -132,6 +135,8 @@ text(s, Inches(0.85), Inches(1.7), Inches(11.6), Inches(1.8),
 text(s, Inches(0.9), Inches(3.5), Inches(10.8), Inches(1.0),
      ("Upload a spreadsheet and automatically clean data, build dashboards, "
       "generate pivot analytics, and produce client-ready AI business reports.", 17, False, RGBColor(203, 213, 225)))
+text(s, Inches(0.92), Inches(4.55), Inches(10.5), Inches(0.45),
+     (GITHUB_URL, 14, True, RGBColor(125, 211, 252)))
 # bottom KPI ribbon
 items = [("6", "Core modules", BLUE), ("4-section", "AI insight report", CYAN), ("PDF · PPT · Excel", "Exports", GREEN), ("Any", "Excel/CSV file", AMBER)]
 bx = Inches(0.9)
@@ -289,19 +294,60 @@ for i, (acc, t, b) in enumerate(uses):
     card(s, x0 + c * (w + gx), y0 + r * (h + gy), w, h, acc, t, b)
 
 # ===========================================================================
-# Slide 8 — Closing
+# Slide 8 — LinkedIn portfolio post (copy-paste ready)
+# ===========================================================================
+s = prs.slides.add_slide(BLANK)
+header(s, "LinkedIn", "Share This Project on LinkedIn")
+linkedin_post = (
+    "I built an Excel Automation & AI Reporting Tool in Python.\n\n"
+    "Upload any Excel/CSV file and the app automatically:\n"
+    "- Cleans and structures messy data\n"
+    "- Builds interactive dashboards with client brand colors\n"
+    "- Generates pivot-table analytics and KPIs\n"
+    "- Writes AI-style business insights\n"
+    "- Exports Excel, PDF, and PowerPoint reports\n\n"
+    f"Open source on GitHub: {GITHUB_URL}\n\n"
+    f"{LINKEDIN_HASHTAGS}"
+)
+rrect(s, Inches(0.62), Inches(1.75), Inches(7.6), Inches(4.9), LIGHT, LINE)
+text(s, Inches(0.92), Inches(1.95), Inches(7.0), Inches(0.4), ("Suggested LinkedIn caption", 15, True, INK))
+bullets(s, Inches(0.92), Inches(2.45), Inches(7.0), Inches(4.0), [
+    "I built an Excel Automation & AI Reporting Tool in Python.",
+    "Upload Excel/CSV -> clean data -> dashboards -> AI insights -> exports.",
+    "Built for freelance gigs: sales, finance, HR, and small-business reporting.",
+    "Features: client branding, custom colors, logo, PDF/PPT deliverables.",
+    f"GitHub: {GITHUB_URL}",
+    "Stack: Python, Streamlit, Pandas, Plotly, AI insights layer.",
+], size=12.5, bullet=">", space=10)
+card(s, Inches(8.45), Inches(1.75), Inches(4.25), Inches(2.2), BLUE, "Best for LinkedIn carousel",
+     "Export these slides as PDF or images. Post 3-5 slides with the GitHub link in the first comment.")
+card(s, Inches(8.45), Inches(4.15), Inches(4.25), Inches(2.5), GREEN, "Hashtags to use",
+     LINKEDIN_HASHTAGS)
+
+# ===========================================================================
+# Slide 9 — Closing + GitHub CTA
 # ===========================================================================
 s = prs.slides.add_slide(BLANK)
 set_bg(s, NAVY)
 rect(s, Inches(0), Inches(0), prs.slide_width, Inches(0.16), BLUE)
-text(s, Inches(0.9), Inches(2.1), Inches(11.5), Inches(1.0), ("From messy spreadsheet to", 30, True, RGBColor(148, 163, 184)))
-text(s, Inches(0.9), Inches(2.9), Inches(11.5), Inches(1.0), ("client-ready report in seconds.", 38, True, WHITE))
-text(s, Inches(0.92), Inches(4.3), Inches(11), Inches(0.6),
-     ("Automated cleaning · Interactive dashboards · AI business insights · Professional exports", 15, False, RGBColor(203, 213, 225)))
-rrect(s, Inches(0.9), Inches(5.3), Inches(4.6), Inches(1.0), RGBColor(30, 41, 59), None)
-rect(s, Inches(0.9), Inches(5.3), Inches(0.08), Inches(1.0), GREEN)
-text(s, Inches(1.2), Inches(5.3), Inches(4.2), Inches(1.0), ("Run it:   streamlit run app.py", 15, True, WHITE), anchor=MSO_ANCHOR.MIDDLE)
+text(s, Inches(0.9), Inches(1.8), Inches(11.5), Inches(1.0), ("From messy spreadsheet to", 30, True, RGBColor(148, 163, 184)))
+text(s, Inches(0.9), Inches(2.55), Inches(11.5), Inches(1.0), ("client-ready report in seconds.", 38, True, WHITE))
+text(s, Inches(0.92), Inches(3.85), Inches(11), Inches(0.6),
+     ("Automated cleaning · Branded dashboards · AI insights · Professional exports", 15, False, RGBColor(203, 213, 225)))
+rrect(s, Inches(0.9), Inches(4.75), Inches(5.5), Inches(1.15), RGBColor(30, 41, 59), None)
+rect(s, Inches(0.9), Inches(4.75), Inches(0.08), Inches(1.15), GREEN)
+text(s, Inches(1.2), Inches(4.75), Inches(5.1), Inches(1.15),
+     (f"GitHub Repo:\n{GITHUB_URL}", 14, True, WHITE), anchor=MSO_ANCHOR.MIDDLE)
+rrect(s, Inches(6.65), Inches(4.75), Inches(5.75), Inches(1.15), RGBColor(30, 41, 59), None)
+rect(s, Inches(6.65), Inches(4.75), Inches(0.08), Inches(1.15), CYAN)
+text(s, Inches(6.95), Inches(4.75), Inches(5.3), Inches(1.15),
+     ("Run locally:\nstreamlit run app.py", 14, True, WHITE), anchor=MSO_ANCHOR.MIDDLE)
+text(s, Inches(0.92), Inches(6.2), Inches(11), Inches(0.5),
+     ("Star the repo · Share on LinkedIn · Use for Fiverr/Upwork client demos", 13, False, RGBColor(148, 163, 184)))
 
-OUTPUT = "Excel_Automation_AI_Tool_Presentation.pptx"
+OUTPUT = "Excel_MVP_LinkedIn_Portfolio.pptx"
+LEGACY_OUTPUT = "Excel_Automation_AI_Tool_Presentation.pptx"
 prs.save(OUTPUT)
+prs.save(LEGACY_OUTPUT)
 print(f"Saved {OUTPUT} with {len(prs.slides._sldIdLst)} slides")
+print(f"Also saved {LEGACY_OUTPUT}")
