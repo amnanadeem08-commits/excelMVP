@@ -133,6 +133,29 @@ COLOR_THEMES: dict[str, dict[str, str | list[str]]] = {
     },
 }
 
+DASHBOARD_FOCUS_OPTIONS: dict[str, dict[str, str]] = {
+    "AI Recommended": {
+        "label": "AI Recommended",
+        "caption": "Let the insight engine lead with the strongest story.",
+    },
+    "Executive Summary": {
+        "label": "Executive Summary",
+        "caption": "Prioritize KPIs, trend movement, and client-ready recommendations.",
+    },
+    "Sales / Revenue": {
+        "label": "Sales / Revenue",
+        "caption": "Emphasize top segments, share charts, and revenue movement.",
+    },
+    "Operations": {
+        "label": "Operations",
+        "caption": "Favor distributions, outliers, quality, and process signals.",
+    },
+    "Finance": {
+        "label": "Finance",
+        "caption": "Highlight totals, growth, variance, and correlation checks.",
+    },
+}
+
 
 def get_default_theme() -> dict:
     return COLOR_THEMES["Corporate Blue"]
@@ -250,6 +273,46 @@ def select_client_branding() -> tuple[dict, str, dict]:
     }
     display_name = company_name.strip() or theme_label
     return theme, display_name, branding
+
+
+def select_dashboard_controls() -> dict:
+    """Render left-sidebar dashboard builder controls."""
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Dashboard Builder")
+
+    focus = st.sidebar.selectbox(
+        "AI dashboard focus",
+        list(DASHBOARD_FOCUS_OPTIONS.keys()),
+        key="dashboard_focus",
+        help="Controls which insight story and chart mix should be emphasized.",
+    )
+    st.sidebar.caption(DASHBOARD_FOCUS_OPTIONS[focus]["caption"])
+
+    density = st.sidebar.radio(
+        "Chart density",
+        ["Compact", "Balanced", "Deep Dive"],
+        index=1,
+        horizontal=False,
+        key="dashboard_density",
+    )
+    max_charts = {"Compact": 4, "Balanced": 8, "Deep Dive": 12}[density]
+
+    layout = st.sidebar.radio(
+        "Chart layout",
+        ["Two columns", "Single column"],
+        index=0,
+        key="dashboard_layout",
+    )
+
+    show_ai_brief = st.sidebar.toggle("Show AI dashboard brief", value=True, key="show_ai_brief")
+
+    return {
+        "focus": focus,
+        "density": density,
+        "max_charts": max_charts,
+        "two_column": layout == "Two columns",
+        "show_ai_brief": show_ai_brief,
+    }
 
 
 # Backward-compatible alias
@@ -631,18 +694,87 @@ def render_dashboard_banner(theme: dict, theme_name: str, branding: dict | None 
     )
 
 
+def render_ai_dashboard_brief(ai: dict, dashboard_config: dict, theme: dict) -> None:
+    """Render the current AI narrative as a compact dashboard brief."""
+    focus = dashboard_config.get("focus", "AI Recommended")
+    insights = ai.get("key_insights", []) or []
+    recommendations = ai.get("recommendations", []) or []
+    anomalies = ai.get("anomalies", []) or []
+
+    lead = ai.get("dataset_summary") or "The dashboard is ready for analysis."
+    insight = insights[0] if insights else "No dominant insight has been detected yet."
+    action = recommendations[0] if recommendations else "Use the generated pivots and charts to choose the next action."
+    watch = anomalies[0] if anomalies else "No major anomaly was detected."
+
+    html = f"""
+    <div style="border:1px solid rgba(148,163,184,.26);border-left:5px solid {theme["accent"]};
+        background:rgba(255,255,255,.92);border-radius:8px;padding:16px 18px;margin:.4rem 0 1rem;
+        box-shadow:0 10px 26px rgba(15,23,42,.06);font-family:Inter,Segoe UI,system-ui,sans-serif;">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+            <div>
+                <div style="color:{theme["muted"]};font-size:11px;text-transform:uppercase;letter-spacing:.08em;">
+                    AI dashboard focus
+                </div>
+                <h3 style="margin:5px 0 8px;color:{theme["ink"]};font-size:19px;">{html_lib.escape(focus)}</h3>
+            </div>
+            <span style="background:{theme["surface_soft"]};color:{theme["accent_dark"]};border-radius:999px;
+                padding:5px 10px;font-size:12px;font-weight:700;">{html_lib.escape(ai.get("dataset_type", "general")).title()}</span>
+        </div>
+        <p style="margin:0 0 10px;color:{theme["ink"]};line-height:1.45;">{html_lib.escape(lead)}</p>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+            <div><strong>Insight</strong><br><span style="color:{theme["muted"]};">{html_lib.escape(insight)}</span></div>
+            <div><strong>Watch</strong><br><span style="color:{theme["muted"]};">{html_lib.escape(watch)}</span></div>
+            <div><strong>Action</strong><br><span style="color:{theme["muted"]};">{html_lib.escape(action)}</span></div>
+        </div>
+    </div>
+    """
+    _html_block(html, height=320)
+
+
 def _chart_key(chart: ChartSpec, index: int) -> str:
     slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in chart.title).strip("_") or "chart"
     return f"plotly_{index}_{slug}"[:120]
 
 
-def render_charts(charts: list[ChartSpec], theme: dict | None = None, two_column: bool = True) -> None:
+def _prioritize_charts(charts: list[ChartSpec], focus: str | None) -> list[ChartSpec]:
+    """Sort generated charts so the selected dashboard story appears first."""
+    if not focus or focus == "AI Recommended":
+        return charts
+
+    focus_keywords = {
+        "Executive Summary": ["trend", "top", "share"],
+        "Sales / Revenue": ["top", "share", "monthly", "trend"],
+        "Operations": ["distribution", "heatmap", "vs", "record count"],
+        "Finance": ["monthly", "trend", "correlation", "distribution"],
+    }
+    keywords = focus_keywords.get(focus, [])
+    if not keywords:
+        return charts
+
+    def score(item: tuple[int, ChartSpec]) -> tuple[int, int]:
+        index, chart = item
+        title = chart.title.lower()
+        matches = sum(1 for word in keywords if word in title)
+        return (-matches, index)
+
+    return [chart for _, chart in sorted(enumerate(charts), key=score)]
+
+
+def render_charts(
+    charts: list[ChartSpec],
+    theme: dict | None = None,
+    two_column: bool = True,
+    max_charts: int | None = None,
+    focus: str | None = None,
+) -> None:
     """Render charts with themed accent bars; optional two-column layout."""
     if not charts:
         st.warning("No valid chart combinations were detected for this dataset.")
         return
     theme = theme or get_default_theme()
     palette = theme["palette"]
+    charts = _prioritize_charts(charts, focus)
+    charts = charts[:max_charts] if max_charts else charts
 
     def _draw(chart: ChartSpec, accent: str, index: int) -> None:
         _html_block(f'<div style="height:5px;background:{accent};border-radius:6px 6px 0 0;"></div>', height=12)

@@ -46,6 +46,39 @@ Built for real freelance use cases: small-business reporting, sales analysis das
 
 Rule-based by default so it works offline with any Excel file; optionally upgrades to an LLM when `OPENAI_API_KEY` is set (see below). The pipeline builds a pandas summary, converts it to a structured prompt, sends it to the LLM (OpenAI/Claude placeholder), and returns the four sections.
 
+## Build Phases
+
+### Phase 1 - Core Excel Automation (applied)
+- Read Excel/CSV files, including multi-sheet workbooks.
+- Clean messy spreadsheet data with pandas.
+- Detect column roles and generate pivot-table-style summaries.
+- Calculate executive KPIs and chart-ready summaries.
+
+### Phase 2 - Dynamic Dashboard Builder (applied)
+- Add left-sidebar theme controls with preset and custom brand palettes.
+- Add client branding controls for company name and logo.
+- Add dashboard focus modes: AI Recommended, Executive Summary, Sales / Revenue, Operations, and Finance.
+- Add chart density and layout controls so the same dataset can become a compact dashboard or a deeper analysis view.
+- Add an AI dashboard brief that surfaces the leading insight, anomaly to watch, and recommended action.
+
+### Phase 3 - AI Analyst Layer (next)
+- Expand the LLM prompt to include user-selected business goals.
+- Let the user choose insight tone: executive, analyst, sales, finance, or operations.
+- Add "Ask this dataset" chat for follow-up questions about the uploaded file.
+- Save AI notes into exported PDF/PPT reports.
+
+### Phase 4 - Excel Macro-Style Workflow (next)
+- Add repeatable workflow templates such as sales report, HR report, inventory report, and finance report.
+- Add one-click "refresh analysis" behavior for newly uploaded monthly files.
+- Export pivot sheets and chart sheets in an Excel workbook that feels like a macro-generated report.
+- Optionally add VBA macro export stubs for clients who require native Excel buttons.
+
+### Phase 5 - Client Delivery Polish (next)
+- Add saved theme presets per client.
+- Add report cover pages with client branding.
+- Add upload history and saved dashboard configuration.
+- Deploy on Streamlit Cloud or a small VPS for client demos.
+
 ## Project Structure
 
 ```text

@@ -22,10 +22,12 @@ from dashboard import (
     filter_dataframe,
     generate_charts,
     inject_styles,
+    render_ai_dashboard_brief,
     render_card,
     render_charts,
     render_dashboard_banner,
     render_metric_cards,
+    select_dashboard_controls,
     select_client_branding,
 )
 from data_cleaning import clean_data, detect_column_types
@@ -108,6 +110,7 @@ def main() -> None:
 
     # Client branding: company name, logo, preset or custom hex colors.
     theme, theme_name, branding = select_client_branding()
+    dashboard_config = select_dashboard_controls()
     inject_styles(theme)
 
     # --- Cleaning + analysis pipeline ---
@@ -187,8 +190,19 @@ def main() -> None:
     with tabs[2]:
         render_dashboard_banner(theme, theme_name, branding)
         render_metric_cards(kpis, theme)
-        st.caption("Change the client color scheme anytime from the sidebar. Filters slice data by category and date.")
-        render_charts(charts, theme)
+        if dashboard_config["show_ai_brief"]:
+            render_ai_dashboard_brief(ai, dashboard_config, theme)
+        st.caption(
+            "Change the client color scheme, AI focus, chart density, and layout anytime from the sidebar. "
+            "Filters slice data by category and date."
+        )
+        render_charts(
+            charts,
+            theme,
+            two_column=dashboard_config["two_column"],
+            max_charts=dashboard_config["max_charts"],
+            focus=dashboard_config["focus"],
+        )
 
     # --- Tab 4: Pivot Tables ---
     with tabs[3]:
