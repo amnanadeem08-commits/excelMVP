@@ -520,6 +520,18 @@ def inject_styles(theme: dict | None = None) -> None:
             border-radius: 8px;
             padding: .55rem;
         }}
+        [data-testid="stSidebar"] [data-testid="stFileUploader"] section {{
+            background: #ffffff;
+            border-color: rgba({gradient_rgb},.25);
+        }}
+        [data-testid="stSidebar"] [data-testid="stFileUploader"] section *,
+        [data-testid="stFileUploader"] section * {{
+            color: #0f172a;
+        }}
+        [data-testid="stSidebar"] [data-testid="stFileUploader"] small,
+        [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] p {{
+            color: rgba(255,255,255,.78);
+        }}
         .hero {{ padding: 1.3rem 0 1.05rem; border-bottom: 1px solid rgba(148,163,184,.22); margin-bottom: .4rem; }}
         .hero h1 {{ font-size: clamp(2rem, 4vw, 3.4rem); line-height: 1.05; margin: 0; color: var(--ink); }}
         .hero p {{ color: var(--muted); font-size: 1.05rem; margin-top: .65rem; max-width: 58rem; }}
@@ -593,6 +605,23 @@ def inject_styles(theme: dict | None = None) -> None:
             border: 1px dashed rgba({gradient_rgb},.45);
             border-radius: 8px;
             padding: .65rem;
+        }}
+        div[data-testid="stFileUploader"] label,
+        div[data-testid="stFileUploader"] p {{
+            color: #0f172a;
+        }}
+        div[data-testid="stFileUploader"] button {{
+            background: #ffffff;
+            color: #0f172a;
+            border: 1px solid #cbd5e1;
+            box-shadow: none;
+        }}
+        div[data-testid="stFileUploader"] button:hover,
+        div[data-testid="stFileUploader"] button:focus {{
+            background: {surface_soft};
+            color: #0f172a;
+            border: 1px solid {accent};
+            box-shadow: 0 0 0 2px rgba({gradient_rgb},.16);
         }}
         .stButton > button, .stDownloadButton > button {{
             background: linear-gradient(180deg, var(--accent), var(--accent-dark));
