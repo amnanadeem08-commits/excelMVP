@@ -22,14 +22,13 @@ from dashboard import (
     filter_dataframe,
     generate_charts,
     inject_styles,
-    render_ai_dashboard_brief,
     render_card,
-    render_charts,
     render_dashboard_banner,
     render_metric_cards,
     select_dashboard_controls,
     select_client_branding,
 )
+from dashboard_modes import render_mode_selector, render_smart_dashboard
 from data_cleaning import clean_data, detect_column_types
 from data_loader import list_sheets, normalize_headers, read_uploaded_file, select_sheet
 from export_module import (
@@ -189,20 +188,17 @@ def main() -> None:
     # --- Tab 3: Dashboard ---
     with tabs[2]:
         render_dashboard_banner(theme, theme_name, branding)
-        render_metric_cards(kpis, theme)
-        if dashboard_config["show_ai_brief"]:
-            render_ai_dashboard_brief(ai, dashboard_config, theme)
-        st.caption(
-            "Change the client color scheme, AI focus, chart density, and layout anytime from the sidebar. "
-            "Filters slice data by category and date."
+        selected_mode = render_mode_selector()
+        mode_artifacts = render_smart_dashboard(
+            filtered_df,
+            mode_key=selected_mode,
+            column_types=column_types,
+            theme=theme,
+            charts=charts,
+            pivots=pivots,
+            ai=ai,
         )
-        render_charts(
-            charts,
-            theme,
-            two_column=dashboard_config["two_column"],
-            max_charts=dashboard_config["max_charts"],
-            focus=dashboard_config["focus"],
-        )
+        st.caption("Filters still apply from the sidebar; changing mode rerenders the dashboard layout and export mix.")
 
     # --- Tab 4: Pivot Tables ---
     with tabs[3]:
@@ -261,15 +257,34 @@ def main() -> None:
         include_tables = report_mode in {"Tables", "Tables + Charts"}
         include_charts = report_mode in {"Charts", "Tables + Charts"}
 
-        excel_bytes = dataframe_to_excel(cleaned_df, pivots)
+        mode_artifacts = locals().get(
+            "mode_artifacts",
+            {
+                "mode": None,
+                "kpis": kpis,
+                "insights": insights,
+                "recommendations": recommendations,
+                "pivots": pivots,
+                "charts": charts,
+            },
+        )
+        export_kpis = mode_artifacts["kpis"]
+        export_insights = mode_artifacts["insights"]
+        export_recommendations = mode_artifacts["recommendations"]
+        export_pivots = mode_artifacts["pivots"]
+        export_charts = mode_artifacts["charts"]
+        mode_label = mode_artifacts["mode"].label if mode_artifacts.get("mode") else "Default Dashboard"
+
+        excel_bytes = dataframe_to_excel(cleaned_df, export_pivots)
         csv_bytes = dataframe_to_csv(cleaned_df)
-        summary_bytes = export_summary_report(summary, cleaning_report, kpis, insights, recommendations, pivots)
+        summary_bytes = export_summary_report(summary, cleaning_report, export_kpis, export_insights, export_recommendations, export_pivots)
         pdf_bytes = make_custom_pdf_report(
-            summary, cleaning_report, insights, recommendations, pivots, charts, include_tables, include_charts
+            summary, cleaning_report, export_insights, export_recommendations, export_pivots, export_charts, include_tables, include_charts
         )
         ppt_bytes = make_ppt_report(
-            summary, cleaning_report, insights, recommendations, pivots, charts, include_tables, include_charts
+            summary, cleaning_report, export_insights, export_recommendations, export_pivots, export_charts, include_tables, include_charts
         )
+        st.caption(f"Downloads use the current Smart Dashboard Mode where possible: {mode_label}.")
 
         st.markdown("**Data exports**")
         d1, d2, d3 = st.columns(3)

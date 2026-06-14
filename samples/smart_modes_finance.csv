@@ -1,0 +1,7 @@
+month,account,revenue,expense,profit,department
+2026-01-01,Subscriptions,45000,28000,17000,Sales
+2026-02-01,Subscriptions,48000,29500,18500,Sales
+2026-03-01,Subscriptions,52000,31000,21000,Sales
+2026-04-01,Subscriptions,54000,32500,21500,Sales
+2026-05-01,Services,30000,21000,9000,Delivery
+2026-06-01,Services,34000,22500,11500,Delivery

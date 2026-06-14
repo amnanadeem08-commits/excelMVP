@@ -1,0 +1,9 @@
+date,warehouse,sku,orders,quantity,stock,status,customer
+2026-01-03,Karachi,SKU-100,45,180,35,Shipped,C001
+2026-01-08,Lahore,SKU-200,38,140,18,Delayed,C002
+2026-02-04,Karachi,SKU-100,52,210,28,Shipped,C003
+2026-02-13,Islamabad,SKU-300,26,95,9,Backlog,C004
+2026-03-02,Lahore,SKU-200,44,170,14,Delayed,C002
+2026-03-16,Karachi,SKU-100,58,240,22,Shipped,C005
+2026-04-07,Islamabad,SKU-300,31,110,7,Backlog,C006
+2026-04-19,Lahore,SKU-200,49,190,12,Shipped,C007
