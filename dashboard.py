@@ -13,15 +13,15 @@ from __future__ import annotations
 
 import base64
 import html as html_lib
+import os
 import re
-from dataclasses import dataclass
 
 import pandas as pd
-import plotly.express as px
 import streamlit as st
 import streamlit.components.v1 as components
 
 from analytics_engine import categorical_dimensions, numeric_measures
+from visualization_engine import ChartRecommendation, ChartSpec, VisualizationEngine
 
 PLOTLY_TEMPLATE = "plotly_white"
 
@@ -133,6 +133,13 @@ COLOR_THEMES: dict[str, dict[str, str | list[str]]] = {
     },
 }
 
+# Backward-compatible named aliases required by the Visualization Engine v2 brief.
+COLOR_THEMES.setdefault("Modern", COLOR_THEMES["Ocean Teal"])
+COLOR_THEMES.setdefault("Minimal", COLOR_THEMES["Slate Minimal"])
+COLOR_THEMES.setdefault("Dark", COLOR_THEMES["Ruby Executive"])
+COLOR_THEMES.setdefault("Light", COLOR_THEMES["Corporate Blue"])
+COLOR_THEMES.setdefault("Professional", COLOR_THEMES["Emerald Finance"])
+
 DASHBOARD_FOCUS_OPTIONS: dict[str, dict[str, str]] = {
     "AI Recommended": {
         "label": "AI Recommended",
@@ -154,6 +161,18 @@ DASHBOARD_FOCUS_OPTIONS: dict[str, dict[str, str]] = {
         "label": "Finance",
         "caption": "Highlight totals, growth, variance, and correlation checks.",
     },
+}
+
+DASHBOARD_TEMPLATE_PRESETS: dict[str, dict[str, object]] = {
+    "Executive Dashboard": {"two_column": True, "max_charts": 6, "focus": "Executive Summary", "height": 420, "dark": False},
+    "Business Dashboard": {"two_column": True, "max_charts": 8, "focus": "AI Recommended", "height": 420, "dark": False},
+    "Finance Dashboard": {"two_column": True, "max_charts": 8, "focus": "Finance", "height": 430, "dark": False},
+    "HR Dashboard": {"two_column": True, "max_charts": 8, "focus": "Operations", "height": 420, "dark": False},
+    "Sales Dashboard": {"two_column": True, "max_charts": 8, "focus": "Sales / Revenue", "height": 430, "dark": False},
+    "Marketing Dashboard": {"two_column": True, "max_charts": 10, "focus": "Sales / Revenue", "height": 420, "dark": False},
+    "Research Dashboard": {"two_column": False, "max_charts": 10, "focus": "AI Recommended", "height": 460, "dark": False},
+    "Minimal Dashboard": {"two_column": False, "max_charts": 5, "focus": "Executive Summary", "height": 400, "dark": False},
+    "Dark Dashboard": {"two_column": True, "max_charts": 8, "focus": "AI Recommended", "height": 430, "dark": True},
 }
 
 
@@ -288,6 +307,14 @@ def select_dashboard_controls() -> dict:
     )
     st.sidebar.caption(DASHBOARD_FOCUS_OPTIONS[focus]["caption"])
 
+    dashboard_template = st.sidebar.selectbox(
+        "Dashboard template",
+        list(DASHBOARD_TEMPLATE_PRESETS.keys()),
+        index=0,
+        key="dashboard_template",
+        help="Applies a professional layout preset for KPI cards, chart density, and visuals.",
+    )
+
     density = st.sidebar.radio(
         "Chart density",
         ["Compact", "Balanced", "Deep Dive"],
@@ -304,13 +331,42 @@ def select_dashboard_controls() -> dict:
         key="dashboard_layout",
     )
 
+    chart_sort = st.sidebar.selectbox(
+        "Chart sorting",
+        ["Relevance", "Title (A-Z)", "Title (Z-A)"],
+        index=0,
+        key="chart_sorting",
+    )
+
+    chart_height = st.sidebar.slider(
+        "Chart height",
+        min_value=320,
+        max_value=680,
+        value=430,
+        step=10,
+        key="chart_height",
+        help="Resize charts for compact or presentation-focused layouts.",
+    )
+
+    show_chart_downloads = st.sidebar.toggle(
+        "Enable chart downloads (PNG/SVG)",
+        value=True,
+        key="show_chart_downloads",
+    )
+
     show_ai_brief = st.sidebar.toggle("Show AI dashboard brief", value=True, key="show_ai_brief")
 
+    template_defaults = DASHBOARD_TEMPLATE_PRESETS.get(dashboard_template, DASHBOARD_TEMPLATE_PRESETS["Executive Dashboard"])
     return {
         "focus": focus,
+        "dashboard_template": dashboard_template,
         "density": density,
-        "max_charts": max_charts,
-        "two_column": layout == "Two columns",
+        "max_charts": min(max_charts, int(template_defaults["max_charts"])),
+        "two_column": (layout == "Two columns") if dashboard_template != "Minimal Dashboard" else False,
+        "chart_sort": chart_sort,
+        "chart_height": chart_height,
+        "show_chart_downloads": show_chart_downloads,
+        "template_dark": bool(template_defaults["dark"]),
         "show_ai_brief": show_ai_brief,
     }
 
@@ -321,156 +377,23 @@ def select_color_theme() -> tuple[dict, str]:
     return theme, name
 
 
-@dataclass
-class ChartSpec:
-    """A titled Plotly figure ready to render or export."""
-
-    title: str
-    figure: object
-
-
-def _format(fig, title: str, theme: dict | None = None):
-    theme = theme or get_default_theme()
-    palette = theme["palette"]
-    fig.update_layout(
-        title=dict(text=title, font=dict(size=17, color=theme["ink"])),
-        template=PLOTLY_TEMPLATE,
-        height=430,
-        margin=dict(l=20, r=20, t=60, b=30),
-        hovermode="x unified",
-        legend_title_text="",
-        colorway=palette,
-        paper_bgcolor="rgba(255,255,255,0.85)",
-        plot_bgcolor="#ffffff",
-        font=dict(color=theme["ink"], family="Inter, Segoe UI, system-ui, sans-serif"),
-    )
-    fig.update_xaxes(gridcolor="rgba(148,163,184,0.2)", linecolor="rgba(148,163,184,0.35)")
-    fig.update_yaxes(gridcolor="rgba(148,163,184,0.2)", linecolor="rgba(148,163,184,0.35)")
-    return fig
-
-
-def _color_traces(fig, theme: dict, chart_kind: str = "default"):
-    """Apply the active theme palette to Plotly traces."""
-    palette = theme["palette"]
-    accent = theme["accent"]
-    for i, trace in enumerate(fig.data):
-        color = palette[i % len(palette)]
-        if trace.type in {"bar", "histogram"}:
-            if hasattr(trace, "marker") and trace.marker:
-                trace.marker.color = color if chart_kind != "line" else accent
-        elif trace.type in {"scatter", "scattergl"}:
-            if getattr(trace, "mode", "") and "lines" in str(trace.mode):
-                trace.line.color = accent
-                if hasattr(trace, "marker") and trace.marker:
-                    trace.marker.color = accent
-            elif hasattr(trace, "marker") and trace.marker:
-                trace.marker.color = color
-        elif trace.type == "pie":
-            if hasattr(trace, "marker") and trace.marker:
-                trace.marker.colors = palette
-        elif trace.type == "heatmap":
-            fig.update_traces(colorscale=[[0, "#f8fafc"], [0.5, theme["accent"]], [1, theme["accent_dark"]]], selector=i)
-    return fig
-
-
 def apply_chart_theme(charts: list[ChartSpec], theme: dict) -> list[ChartSpec]:
     """Re-style already-generated charts when the client changes the color theme."""
-    for chart in charts:
-        kind = "line" if "Trend" in chart.title else "default"
-        _format(chart.figure, chart.title, theme)
-        _color_traces(chart.figure, theme, kind)
-    return charts
+    return VisualizationEngine(theme).apply_theme(charts)
 
 
 def generate_charts(df: pd.DataFrame, column_types: dict[str, list[str]], theme: dict | None = None) -> list[ChartSpec]:
     """Build a smart set of charts based on the detected column types."""
     theme = theme or get_default_theme()
-    palette = theme["palette"]
-    accent = theme["accent"]
-    charts: list[ChartSpec] = []
-    numeric_cols = numeric_measures(df, column_types)
-    categorical_cols = categorical_dimensions(df, column_types)
-    date_cols = [col for col in column_types.get("datetime", []) if col in df.columns]
+    template_name = st.session_state.get("dashboard_template", "Executive Dashboard")
+    return VisualizationEngine(theme, template_name=template_name).build_auto_charts(df, column_types, max_charts=18)
 
-    # Line charts: trends over time.
-    for date_col in date_cols[:2]:
-        for measure in numeric_cols[:2]:
-            monthly = (
-                df.assign(_month=pd.to_datetime(df[date_col], errors="coerce").dt.to_period("M").dt.to_timestamp())
-                .dropna(subset=["_month"])
-                .groupby("_month", as_index=False)[measure]
-                .sum()
-                .sort_values("_month")
-            )
-            if len(monthly) >= 2:
-                title = f"Monthly {measure} Trend"
-                fig = px.line(
-                    monthly, x="_month", y=measure, markers=True,
-                    labels={"_month": "Month"}, title=title, color_discrete_sequence=[accent],
-                )
-                fig.update_traces(line=dict(width=3), marker=dict(size=8))
-                charts.append(ChartSpec(title, _format(fig, title, theme)))
 
-    # Bar / pie charts: top categories.
-    for cat in categorical_cols[:4]:
-        for measure in numeric_cols[:2]:
-            aggregated = df.groupby(cat, as_index=False)[measure].sum().sort_values(measure, ascending=False).head(10)
-            if aggregated.empty:
-                continue
-            orientation = "h" if aggregated[cat].astype(str).str.len().median() > 14 else "v"
-            title = f"Top {cat} by {measure}"
-            if orientation == "h":
-                aggregated = aggregated.sort_values(measure, ascending=True)
-                fig = px.bar(
-                    aggregated, x=measure, y=cat, orientation="h", title=title,
-                    text_auto=".2s", color=cat, color_discrete_sequence=palette,
-                )
-            else:
-                fig = px.bar(
-                    aggregated, x=cat, y=measure, title=title,
-                    text_auto=".2s", color=cat, color_discrete_sequence=palette,
-                )
-            charts.append(ChartSpec(title, _format(fig, title, theme)))
-
-            if 2 <= df[cat].nunique(dropna=True) <= 6:
-                pie_title = f"{measure} Share by {cat}"
-                fig = px.pie(
-                    aggregated, names=cat, values=measure, hole=0.42,
-                    title=pie_title, color_discrete_sequence=palette,
-                )
-                charts.append(ChartSpec(pie_title, _format(fig, pie_title, theme)))
-
-    # Distributions.
-    for measure in numeric_cols[:4]:
-        if df[measure].nunique(dropna=True) > 5:
-            title = f"{measure} Distribution"
-            fig = px.histogram(df, x=measure, nbins=35, marginal="box", title=title, color_discrete_sequence=[accent])
-            charts.append(ChartSpec(title, _format(fig, title, theme)))
-
-    # Relationship scatter.
-    if len(numeric_cols) >= 2:
-        x_col, y_col = numeric_cols[:2]
-        title = f"{x_col} vs {y_col}"
-        sample = df[[x_col, y_col]].dropna()
-        if len(sample) > 0:
-            if len(sample) > 3000:
-                sample = sample.sample(3000, random_state=42)
-            fig = px.scatter(sample, x=x_col, y=y_col, title=title, color_discrete_sequence=[accent])
-            fig.update_traces(marker=dict(color=accent, opacity=0.65, size=7))
-            charts.append(ChartSpec(title, _format(fig, title, theme)))
-
-    # Correlation heatmap.
-    if len(numeric_cols) >= 3:
-        corr = df[numeric_cols[:12]].corr(numeric_only=True)
-        title = "Correlation Heatmap"
-        fig = px.imshow(
-            corr, text_auto=".2f", aspect="auto",
-            color_continuous_scale=[theme["surface_soft"], accent, theme["accent_dark"]],
-            title=title,
-        )
-        charts.append(ChartSpec(title, _format(fig, title, theme)))
-
-    return charts[:14]
+def recommend_charts(df: pd.DataFrame, column_types: dict[str, list[str]], theme: dict | None = None) -> list[ChartRecommendation]:
+    """Return ranked chart recommendations for the current dataset."""
+    theme = theme or get_default_theme()
+    template_name = st.session_state.get("dashboard_template", "Executive Dashboard")
+    return VisualizationEngine(theme, template_name=template_name).recommend(df, column_types)
 
 
 # ---------------------------------------------------------------------------
@@ -789,27 +712,82 @@ def _prioritize_charts(charts: list[ChartSpec], focus: str | None) -> list[Chart
     return [chart for _, chart in sorted(enumerate(charts), key=score)]
 
 
+def _apply_chart_sorting(charts: list[ChartSpec], chart_sort: str | None) -> list[ChartSpec]:
+    if chart_sort == "Title (A-Z)":
+        return sorted(charts, key=lambda c: c.title.lower())
+    if chart_sort == "Title (Z-A)":
+        return sorted(charts, key=lambda c: c.title.lower(), reverse=True)
+    return charts
+
+
+def _chart_download_buttons(chart: ChartSpec, index: int, enabled: bool = True) -> None:
+    if not enabled or os.environ.get("EXCELMVP_SKIP_HEAVY_EXPORTS") == "1":
+        return
+    col_png, col_svg = st.columns(2)
+    try:
+        png_bytes = chart.figure.to_image(format="png", width=1600, height=920, scale=2)
+        with col_png:
+            st.download_button(
+                "PNG",
+                png_bytes,
+                file_name=f"chart_{index + 1}.png",
+                mime="image/png",
+                key=f"download-png-{index}",
+            )
+    except Exception:
+        with col_png:
+            st.caption("PNG export unavailable")
+
+    try:
+        svg_bytes = chart.figure.to_image(format="svg", width=1600, height=920, scale=1)
+        with col_svg:
+            st.download_button(
+                "SVG",
+                svg_bytes,
+                file_name=f"chart_{index + 1}.svg",
+                mime="image/svg+xml",
+                key=f"download-svg-{index}",
+            )
+    except Exception:
+        with col_svg:
+            st.caption("SVG export unavailable")
+
+
 def render_charts(
     charts: list[ChartSpec],
     theme: dict | None = None,
     two_column: bool = True,
     max_charts: int | None = None,
     focus: str | None = None,
+    dashboard_config: dict | None = None,
 ) -> None:
     """Render charts with themed accent bars; optional two-column layout."""
     if not charts:
         st.warning("No valid chart combinations were detected for this dataset.")
         return
     theme = theme or get_default_theme()
+    dashboard_config = dashboard_config or {}
     palette = theme["palette"]
-    charts = _prioritize_charts(charts, focus)
-    charts = charts[:max_charts] if max_charts else charts
+    template_name = dashboard_config.get("dashboard_template", st.session_state.get("dashboard_template", "Executive Dashboard"))
+    template_defaults = DASHBOARD_TEMPLATE_PRESETS.get(template_name, DASHBOARD_TEMPLATE_PRESETS["Executive Dashboard"])
+    effective_focus = focus or dashboard_config.get("focus") or str(template_defaults["focus"])
+    effective_two_column = two_column if dashboard_config.get("dashboard_template") is None else bool(dashboard_config.get("two_column", template_defaults["two_column"]))
+    effective_max = max_charts or int(dashboard_config.get("max_charts", template_defaults["max_charts"]))
+    chart_height = int(dashboard_config.get("chart_height", template_defaults["height"]))
+    show_downloads = bool(dashboard_config.get("show_chart_downloads", False))
+    chart_sort = dashboard_config.get("chart_sort", "Relevance")
+
+    charts = _prioritize_charts(charts, effective_focus)
+    charts = _apply_chart_sorting(charts, chart_sort)
+    charts = charts[:effective_max] if effective_max else charts
 
     def _draw(chart: ChartSpec, accent: str, index: int) -> None:
         _html_block(f'<div style="height:5px;background:{accent};border-radius:6px 6px 0 0;"></div>', height=12)
+        chart.figure.update_layout(height=chart_height)
         st.plotly_chart(chart.figure, use_container_width=True, key=_chart_key(chart, index))
+        _chart_download_buttons(chart, index, enabled=show_downloads)
 
-    if not two_column:
+    if not effective_two_column:
         for idx, chart in enumerate(charts):
             _draw(chart, palette[idx % len(palette)], idx)
         return

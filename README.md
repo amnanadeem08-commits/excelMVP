@@ -10,7 +10,9 @@ Built for real freelance use cases: small-business reporting, sales analysis das
 
 ### 1. Excel input system
 - Upload `.xlsx`, `.xls`, and `.csv` files
-- Multi-sheet Excel support with a sheet selector
+- **Excel-like workbook workspace** with ribbon toolbar and sheet tabs
+- Multi-sheet Excel support with add, rename, delete, and duplicate sheet actions
+- Session-persistent workbook state across Streamlit reruns
 - Automatic structure detection (rows, columns, column roles, missing values)
 
 ### 2. Data cleaning engine (pandas)
@@ -45,6 +47,41 @@ Built for real freelance use cases: small-business reporting, sales analysis das
 4. **Recommendations** - 3-5 actionable suggestions (e.g. "Focus marketing on Product A as it contributes 42% of total revenue").
 
 Rule-based by default so it works offline with any Excel file; optionally upgrades to an LLM when `OPENAI_API_KEY` is set (see below). The pipeline builds a pandas summary, converts it to a structured prompt, sends it to the LLM (OpenAI/Claude placeholder), and returns the four sections.
+
+## Evolution Roadmap (Dashboard Studio)
+
+ExcelMVP is evolving into an **AI-powered Excel-like Dashboard Studio**. Phases are delivered sequentially with regression validation after each phase.
+
+### Studio Phase 1 — Excel Workspace Foundation (applied)
+- Workbook Manager with sheet CRUD (add, rename, delete, duplicate)
+- Ribbon-style workbook toolbar above the main tabs
+- Excel-style sheet tabs with active sheet switching
+- Workbook State Manager with session persistence
+- Backward-compatible integration with the existing analytics pipeline
+
+### Studio Phase 2 — Dashboard Canvas Engine (applied)
+- Modular `canvas/` package with grid system, layout manager, and serialization
+- Responsive grid using ratio-based breakpoints (desktop / laptop / tablet-ready)
+- Canvas state manager with layout persistence per workbook + sheet + dashboard mode
+- Dashboard tab now renders through the canvas engine (auto-layout, no manual editing yet)
+
+### Studio Phase 3 — Intelligent Widget Framework (applied)
+- Enterprise `widgets/` package with BaseWidget, Controller, Renderer, Data Binding, AI/Export adapters
+- Event-driven architecture with lifecycle hooks and plugin registry
+- Dashboard renders via Workbook → Canvas → Widget Controller → Renderer pipeline
+- Nine widget types architected: KPI, Chart, Table, Pivot, Text, Image, Logo, Divider, Shape
+
+### Engine 11 — Decision Intelligence (applied)
+- `decision_intelligence/` package with standardized Decision Object contract
+- Independent from visualization rendering; widgets and charts request decisions via interface
+- Rule-based provider with quality validation (relevance, validity, confidence, actionability)
+- Ready for future LLM, ML, predictive, prescriptive, and agent providers
+
+### Studio Phase 4 — Smart Visualization Engine V2 (next)
+- Improved chart recommendation, confidence scoring, and validation
+
+### Studio Phase 5 — Excel Dashboard Builder (next)
+- Drag-and-drop editor, alignment tools, keyboard shortcuts, context menus
 
 ## Build Phases
 
@@ -85,6 +122,40 @@ Rule-based by default so it works offline with any Excel file; optionally upgrad
 excelMVP/
 |-- app.py                # Streamlit UI (thin orchestration layer)
 |-- data_loader.py        # File input, multi-sheet, structure detection
+|-- workbook/             # Workbook manager, session state, ribbon + sheet tabs
+|   |-- manager.py
+|   |-- state.py
+|   |-- ui.py
+|-- canvas/               # Dashboard canvas engine, grid, layout, serialization
+|   |-- engine.py
+|   |-- grid.py
+|   |-- layout.py
+|   |-- renderer.py
+|   |-- serialization.py
+|   |-- state.py
+|-- widgets/              # Enterprise widget framework (controller, renderer, binding, events)
+|   |-- base.py
+|   |-- controller.py
+|   |-- renderer.py
+|   |-- registry.py
+|   |-- widget_factory.py
+|   |-- databinding.py
+|   |-- ai_adapter.py
+|   |-- export_adapter.py
+|   |-- events.py
+|   |-- lifecycle.py
+|   |-- models.py
+|   |-- validators.py
+|   |-- canvas_bridge.py
+|   |-- kpi/  charts/  table/  pivot/  text/  image/  logo/  divider/  shape/
+|-- decision_intelligence/  # Decision Intelligence Engine (Engine 11)
+|   |-- engine.py
+|   |-- models.py
+|   |-- interface.py
+|   |-- contract.py
+|   |-- validators.py
+|   |-- integration.py
+|   |-- providers/
 |-- data_cleaning.py      # Pandas cleaning engine + column type detection
 |-- analytics_engine.py   # Pivot automation, KPIs, growth calculations
 |-- dashboard.py          # Plotly charts, KPI cards, filters, styling
@@ -115,7 +186,7 @@ Then open the URL Streamlit prints (default `http://localhost:8501`).
 ## How To Use
 
 1. Upload an Excel or CSV file from the sidebar or main page.
-2. For multi-sheet Excel files, pick the sheet to analyze.
+2. Use the **workbook ribbon** and **sheet tabs** to manage sheets (add, rename, delete, duplicate, switch active sheet).
 3. Review the dataset preview, detected column types, and cleaning report.
 4. Use the sidebar filters to slice by category and date.
 5. Explore the Executive Summary, Dashboard, Pivot Tables, and AI Insights tabs.

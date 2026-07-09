@@ -30,6 +30,7 @@ from dashboard import (
 )
 from data_cleaning import detect_column_types
 from forecasting.simple_forecast import ForecastResult, simple_date_forecast
+from canvas.renderer import render_dashboard_canvas
 from insights.click_insights import render_explain_button
 
 from .mode_config import DASHBOARD_MODES, DEFAULT_MODE, MODE_ORDER, get_mode
@@ -142,8 +143,11 @@ def render_smart_dashboard(
     charts: list[ChartSpec] | None = None,
     pivots: list[Any] | None = None,
     ai: dict | None = None,
+    dashboard_config: dict[str, Any] | None = None,
+    workbook_id: str = "",
+    sheet_id: str = "",
 ) -> dict[str, Any]:
-    """Dispatch to the selected mode renderer and return export artifacts."""
+    """Dispatch to the canvas renderer and return export artifacts."""
     artifacts = prepare_mode_artifacts(
         df,
         mode_key,
@@ -154,14 +158,15 @@ def render_smart_dashboard(
         base_ai=ai,
     )
 
-    if artifacts["mode"].key == "executive":
-        render_executive_dashboard(df, artifacts=artifacts, theme=theme)
-    elif artifacts["mode"].key == "analytical":
-        render_analytical_dashboard(df, artifacts=artifacts, theme=theme)
-    elif artifacts["mode"].key == "financial":
-        render_financial_dashboard(df, artifacts=artifacts, theme=theme)
-    elif artifacts["mode"].key == "operational":
-        render_operational_dashboard(df, artifacts=artifacts, theme=theme)
+    render_dashboard_canvas(
+        df,
+        workbook_id=workbook_id or "workbook",
+        sheet_id=sheet_id or "sheet",
+        dashboard_id=artifacts["mode"].key,
+        theme=theme,
+        artifacts=artifacts,
+        dashboard_config=dashboard_config,
+    )
     return artifacts
 
 
@@ -170,6 +175,7 @@ def render_executive_dashboard(
     *,
     artifacts: dict[str, Any] | None = None,
     theme: dict | None = None,
+    dashboard_config: dict[str, Any] | None = None,
 ) -> None:
     """Executive dashboard: KPIs, short insights, minimal charts."""
     artifacts = artifacts or prepare_mode_artifacts(df, "executive", theme=theme)
@@ -183,7 +189,13 @@ def render_executive_dashboard(
 
     if artifacts["charts"]:
         st.markdown("#### Minimal Visuals")
-        render_charts(artifacts["charts"], theme or get_default_theme(), two_column=True, max_charts=2)
+        render_charts(
+            artifacts["charts"],
+            theme or get_default_theme(),
+            two_column=True,
+            max_charts=2,
+            dashboard_config=dashboard_config,
+        )
         for idx, chart in enumerate(artifacts["charts"][:2]):
             render_explain_button(f"exec-chart-{idx}", df, chart.title, mode="Executive", chart_type="chart")
 
@@ -193,6 +205,7 @@ def render_analytical_dashboard(
     *,
     artifacts: dict[str, Any] | None = None,
     theme: dict | None = None,
+    dashboard_config: dict[str, Any] | None = None,
 ) -> None:
     """Analytical dashboard: full charts, filters, pivots, and exploration."""
     artifacts = artifacts or prepare_mode_artifacts(df, "analytical", theme=theme)
@@ -202,7 +215,12 @@ def render_analytical_dashboard(
     render_explain_button("analytical-kpis", df, "Analytical KPI set", mode="Analytical")
 
     st.markdown("#### Detailed Charts")
-    render_charts(artifacts["charts"], theme or get_default_theme(), two_column=True)
+    render_charts(
+        artifacts["charts"],
+        theme or get_default_theme(),
+        two_column=True,
+        dashboard_config=dashboard_config,
+    )
     if artifacts["charts"]:
         selected = st.selectbox("Explain chart", [chart.title for chart in artifacts["charts"]], key="analytical-chart-explain")
         render_explain_button("analytical-chart", df, selected, mode="Analytical", chart_type="chart")
@@ -223,6 +241,7 @@ def render_financial_dashboard(
     *,
     artifacts: dict[str, Any] | None = None,
     theme: dict | None = None,
+    dashboard_config: dict[str, Any] | None = None,
 ) -> None:
     """Financial dashboard: revenue, cost, profit, margins, trends, forecast."""
     theme = theme or get_default_theme()
@@ -255,7 +274,14 @@ def render_financial_dashboard(
 
     if artifacts["charts"]:
         st.markdown("#### Financial Trends")
-        render_charts(artifacts["charts"], theme, two_column=True, max_charts=6, focus="Finance")
+        render_charts(
+            artifacts["charts"],
+            theme,
+            two_column=True,
+            max_charts=6,
+            focus="Finance",
+            dashboard_config=dashboard_config,
+        )
 
 
 def render_operational_dashboard(
@@ -263,6 +289,7 @@ def render_operational_dashboard(
     *,
     artifacts: dict[str, Any] | None = None,
     theme: dict | None = None,
+    dashboard_config: dict[str, Any] | None = None,
 ) -> None:
     """Operational dashboard: volume, usage, inventory, customers, process signals."""
     theme = theme or get_default_theme()
@@ -280,7 +307,14 @@ def render_operational_dashboard(
 
     if artifacts["charts"]:
         st.markdown("#### Operational Charts")
-        render_charts(artifacts["charts"], theme, two_column=True, max_charts=6, focus="Operations")
+        render_charts(
+            artifacts["charts"],
+            theme,
+            two_column=True,
+            max_charts=6,
+            focus="Operations",
+            dashboard_config=dashboard_config,
+        )
 
     if artifacts["pivots"]:
         st.markdown("#### Operational Breakdowns")

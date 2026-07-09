@@ -13,6 +13,7 @@ Run with:  streamlit run app.py
 
 from __future__ import annotations
 
+import os
 import pandas as pd
 import streamlit as st
 
@@ -30,11 +31,13 @@ from dashboard import (
 )
 from dashboard_modes import render_mode_selector, render_smart_dashboard
 from data_cleaning import clean_data, detect_column_types
-from data_loader import list_sheets, normalize_headers, read_uploaded_file, select_sheet
+from data_loader import normalize_headers, read_uploaded_file
+from workbook import load_or_create, render_workbook_chrome
 from export_module import (
     dataframe_to_csv,
     dataframe_to_excel,
     export_summary_report,
+    generate_export_validation_report,
     make_custom_pdf_report,
     make_ppt_report,
 )
@@ -95,16 +98,17 @@ def main() -> None:
     if uploaded_file is None:
         st.stop()
 
-    # --- Input system: read file and (optionally) pick a sheet ---
-    workbook = read_uploaded_file(uploaded_file)
-    sheet_name = None
-    if isinstance(workbook, dict) and len(workbook) > 1:
-        with st.sidebar:
-            sheet_name = st.selectbox("Workbook sheet", list_sheets(workbook))
-    raw_df = select_sheet(workbook, sheet_name)
+    # --- Workbook workspace: load file, manage sheets, ribbon + tabs ---
+    parsed_workbook = read_uploaded_file(uploaded_file)
+    workbook_manager = load_or_create(uploaded_file, parsed_workbook)
+    workbook_manager = render_workbook_chrome(workbook_manager)
+    raw_df = workbook_manager.select_active_via_loader()
 
     if raw_df is None or raw_df.empty:
-        st.error("The selected file or sheet is empty.")
+        st.warning(
+            f"Sheet **{workbook_manager.active_sheet}** is empty. "
+            "Add data, switch to another sheet, or duplicate a populated sheet to continue."
+        )
         st.stop()
 
     # Client branding: company name, logo, preset or custom hex colors.
@@ -197,6 +201,9 @@ def main() -> None:
             charts=charts,
             pivots=pivots,
             ai=ai,
+            dashboard_config=dashboard_config,
+            workbook_id=workbook_manager.source_name,
+            sheet_id=workbook_manager.active_sheet,
         )
         st.caption("Filters still apply from the sidebar; changing mode rerenders the dashboard layout and export mix.")
 
@@ -275,15 +282,29 @@ def main() -> None:
         export_charts = mode_artifacts["charts"]
         mode_label = mode_artifacts["mode"].label if mode_artifacts.get("mode") else "Default Dashboard"
 
-        excel_bytes = dataframe_to_excel(cleaned_df, export_pivots)
+        skip_heavy_exports = os.environ.get("EXCELMVP_SKIP_HEAVY_EXPORTS") == "1"
+        export_charts_for_files = [] if skip_heavy_exports else export_charts
+        excel_bytes = dataframe_to_excel(
+            cleaned_df,
+            pivots=export_pivots,
+            charts=export_charts_for_files,
+            summary=summary,
+            kpis=export_kpis,
+            insights=export_insights,
+            recommendations=export_recommendations,
+        )
         csv_bytes = dataframe_to_csv(cleaned_df)
         summary_bytes = export_summary_report(summary, cleaning_report, export_kpis, export_insights, export_recommendations, export_pivots)
-        pdf_bytes = make_custom_pdf_report(
-            summary, cleaning_report, export_insights, export_recommendations, export_pivots, export_charts, include_tables, include_charts
-        )
-        ppt_bytes = make_ppt_report(
-            summary, cleaning_report, export_insights, export_recommendations, export_pivots, export_charts, include_tables, include_charts
-        )
+        if skip_heavy_exports:
+            pdf_bytes = b""
+            ppt_bytes = b""
+        else:
+            pdf_bytes = make_custom_pdf_report(
+                summary, cleaning_report, export_insights, export_recommendations, export_pivots, export_charts, include_tables, include_charts
+            )
+            ppt_bytes = make_ppt_report(
+                summary, cleaning_report, export_insights, export_recommendations, export_pivots, export_charts, include_tables, include_charts
+            )
         st.caption(f"Downloads use the current Smart Dashboard Mode where possible: {mode_label}.")
 
         st.markdown("**Data exports**")
@@ -316,6 +337,29 @@ def main() -> None:
                 file_name="client_analytics_deck.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
             )
+
+        validation_report = (
+            b'{"skipped_heavy_exports": true}'
+            if skip_heavy_exports
+            else generate_export_validation_report(
+                cleaned_df,
+                summary,
+                cleaning_report,
+                export_kpis,
+                export_insights,
+                export_recommendations,
+                export_pivots,
+                export_charts,
+                include_tables,
+                include_charts,
+            )
+        )
+        st.download_button(
+            "Export Validation Report",
+            validation_report,
+            file_name="export_validation_report.json",
+            mime="application/json",
+        )
 
         st.caption("Choose whether the PDF/PPT deliverable includes pivot tables, charts, both, or summary only.")
 
