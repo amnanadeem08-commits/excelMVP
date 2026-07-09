@@ -1,0 +1,566 @@
+{
+  "status": "ok",
+  "chart_pipeline": {
+    "charts_detected": 18,
+    "charts_rendered": 18,
+    "charts_exported": 18,
+    "missing_charts": 0,
+    "failures": [],
+    "chart_details": [
+      {
+        "title": "Monthly revenue Trend",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_2p_5zm9n.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Monthly revenue Area Trend",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_vec8uawn.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Monthly cost Trend",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_ffg5xixd.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Monthly cost Area Trend",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_h30jico4.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Top region by revenue",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_y837rk3g.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "revenue Share by region",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_4i0cg5lk.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Treemap: revenue by region",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_e1mbnr8p.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Funnel: revenue by region",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_uxkb77xc.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Waterfall: revenue by region",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_yhbh57wi.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Top region by cost",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_fxvi6ahe.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "cost Share by region",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_comsji4v.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Treemap: cost by region",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_rqizy7o5.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Funnel: cost by region",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_883qmjvh.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Waterfall: cost by region",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_hr2i80cl.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Top product by revenue",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_9iup7khb.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "revenue Share by product",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_5koq59dg.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Treemap: revenue by product",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_kg8hplcr.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      },
+      {
+        "title": "Funnel: revenue by product",
+        "path": "C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_4dmq4_97.png",
+        "width_px": 3840,
+        "height_px": 2160,
+        "dpi": 192,
+        "readable": true,
+        "svg_supported": true
+      }
+    ]
+  },
+  "exports": {
+    "excel": {
+      "ok": true,
+      "charts_embedded": 20,
+      "chart_failures": []
+    },
+    "powerpoint": {
+      "ok": true,
+      "charts_embedded": 18,
+      "chart_failures": []
+    },
+    "pdf": {
+      "ok": true,
+      "charts_embedded": 18,
+      "chart_failures": []
+    },
+    "storyboard": {
+      "ok": true,
+      "note": "Storyboard uses PowerPoint visual pipeline."
+    }
+  },
+  "validation_checks": {
+    "dashboard_generated": true,
+    "charts_generated": true,
+    "chart_files_created": true,
+    "charts_embedded_excel": true,
+    "charts_embedded_powerpoint": true,
+    "charts_embedded_pdf": true,
+    "no_placeholder_tables_replacing_charts": true,
+    "no_broken_exports": true
+  },
+  "failures": [],
+  "execution": {
+    "elapsed_ms": 106880,
+    "peak_memory_mb": 0.0
+  },
+  "stage_trace": [
+    {
+      "stage": "dataset",
+      "status": "ok",
+      "details": "rows=8, cols=7",
+      "ts_ms": 1783501196878
+    },
+    {
+      "stage": "cleaning",
+      "status": "ok",
+      "details": "missing_fixed=0",
+      "ts_ms": 1783501196878
+    },
+    {
+      "stage": "pivot_generation",
+      "status": "ok",
+      "details": "pivot_count=12",
+      "ts_ms": 1783501196878
+    },
+    {
+      "stage": "chart_object_creation",
+      "status": "ok",
+      "details": "Charts received: 18",
+      "ts_ms": 1783501196878
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Monthly revenue Trend: figure object is serializable",
+      "ts_ms": 1783501196889
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Monthly revenue Trend: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_2p_5zm9n.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501200338
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Monthly revenue Trend: SVG bytes=10701",
+      "ts_ms": 1783501200512
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Monthly revenue Area Trend: figure object is serializable",
+      "ts_ms": 1783501200519
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Monthly revenue Area Trend: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_vec8uawn.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501201145
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Monthly revenue Area Trend: SVG bytes=8842",
+      "ts_ms": 1783501201300
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Monthly cost Trend: figure object is serializable",
+      "ts_ms": 1783501201306
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Monthly cost Trend: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_ffg5xixd.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501202048
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Monthly cost Trend: SVG bytes=10695",
+      "ts_ms": 1783501202278
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Monthly cost Area Trend: figure object is serializable",
+      "ts_ms": 1783501202292
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Monthly cost Area Trend: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_h30jico4.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501203091
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Monthly cost Area Trend: SVG bytes=10081",
+      "ts_ms": 1783501203243
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Top region by revenue: figure object is serializable",
+      "ts_ms": 1783501203259
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Top region by revenue: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_y837rk3g.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501203958
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Top region by revenue: SVG bytes=12772",
+      "ts_ms": 1783501204140
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "revenue Share by region: figure object is serializable",
+      "ts_ms": 1783501204143
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "revenue Share by region: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_4i0cg5lk.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501204643
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "revenue Share by region: SVG bytes=5941",
+      "ts_ms": 1783501204704
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Treemap: revenue by region: figure object is serializable",
+      "ts_ms": 1783501204707
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Treemap: revenue by region: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_e1mbnr8p.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501205411
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Treemap: revenue by region: SVG bytes=6805",
+      "ts_ms": 1783501205571
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Funnel: revenue by region: figure object is serializable",
+      "ts_ms": 1783501205576
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Funnel: revenue by region: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_uxkb77xc.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501206090
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Funnel: revenue by region: SVG bytes=5778",
+      "ts_ms": 1783501206230
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Waterfall: revenue by region: figure object is serializable",
+      "ts_ms": 1783501206238
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Waterfall: revenue by region: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_yhbh57wi.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501206808
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Waterfall: revenue by region: SVG bytes=9208",
+      "ts_ms": 1783501206993
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Top region by cost: figure object is serializable",
+      "ts_ms": 1783501207001
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Top region by cost: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_fxvi6ahe.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501207708
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Top region by cost: SVG bytes=11484",
+      "ts_ms": 1783501208020
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "cost Share by region: figure object is serializable",
+      "ts_ms": 1783501208042
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "cost Share by region: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_comsji4v.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501208580
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "cost Share by region: SVG bytes=5933",
+      "ts_ms": 1783501208706
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Treemap: cost by region: figure object is serializable",
+      "ts_ms": 1783501208710
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Treemap: cost by region: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_rqizy7o5.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501209445
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Treemap: cost by region: SVG bytes=6837",
+      "ts_ms": 1783501209543
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Funnel: cost by region: figure object is serializable",
+      "ts_ms": 1783501209546
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Funnel: cost by region: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_883qmjvh.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501210137
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Funnel: cost by region: SVG bytes=5775",
+      "ts_ms": 1783501210277
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Waterfall: cost by region: figure object is serializable",
+      "ts_ms": 1783501210279
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Waterfall: cost by region: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_hr2i80cl.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501210812
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Waterfall: cost by region: SVG bytes=7571",
+      "ts_ms": 1783501210941
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Top product by revenue: figure object is serializable",
+      "ts_ms": 1783501210945
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Top product by revenue: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_9iup7khb.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501211611
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Top product by revenue: SVG bytes=12772",
+      "ts_ms": 1783501211862
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "revenue Share by product: figure object is serializable",
+      "ts_ms": 1783501211872
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "revenue Share by product: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_5koq59dg.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501212437
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "revenue Share by product: SVG bytes=5932",
+      "ts_ms": 1783501212543
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Treemap: revenue by product: figure object is serializable",
+      "ts_ms": 1783501212545
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Treemap: revenue by product: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_kg8hplcr.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501213128
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Treemap: revenue by product: SVG bytes=6806",
+      "ts_ms": 1783501213395
+    },
+    {
+      "stage": "chart_render_verify",
+      "status": "ok",
+      "details": "Funnel: revenue by product: figure object is serializable",
+      "ts_ms": 1783501213404
+    },
+    {
+      "stage": "chart_png_verify",
+      "status": "ok",
+      "details": "Funnel: revenue by product: C:\\Users\\DELL\\AppData\\Local\\Temp\\excel_ai_chart_4dmq4_97.png (3840x2160px @ 192dpi)",
+      "ts_ms": 1783501214037
+    },
+    {
+      "stage": "chart_svg_verify",
+      "status": "ok",
+      "details": "Funnel: revenue by product: SVG bytes=5787",
+      "ts_ms": 1783501214158
+    },
+    {
+      "stage": "chart_image_generation",
+      "status": "ok",
+      "details": "Exported=18, Failed=0",
+      "ts_ms": 1783501214158
+    }
+  ]
+}

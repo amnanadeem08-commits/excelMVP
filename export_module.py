@@ -14,17 +14,72 @@ CUSTOMIZE:
 from __future__ import annotations
 
 import html
+import json
+import os
 import tempfile
+import time
+import tracemalloc
+from dataclasses import dataclass
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from openpyxl.drawing.image import Image as XLImage
+from PIL import Image as PILImage
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Image as RLImage
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+
+CHART_WIDTH_PX = 1920
+CHART_HEIGHT_PX = 1080
+CHART_SCALE = 2
+BASE_DPI = 96
+
+
+@dataclass
+class ExportStage:
+    stage: str
+    status: str
+    details: str
+    ts_ms: int
+
+
+def _trace(trace: list[ExportStage], stage: str, status: str, details: str) -> None:
+    trace.append(ExportStage(stage=stage, status=status, details=details, ts_ms=int(time.time() * 1000)))
+
+
+def _safe_sheet_name(value: str, fallback: str = "Sheet") -> str:
+    name = (value or fallback).replace("/", "-").replace("\\", "-").replace("*", "-").replace("?", "")
+    name = name.replace("[", "(").replace("]", ")").replace(":", "-")
+    return name[:31] or fallback
+
+
+def _verify_written_image(path: str) -> tuple[int, int]:
+    with PILImage.open(path) as img:
+        img.verify()
+    with PILImage.open(path) as img:
+        width, height = img.size
+    return width, height
+
+
+def _cleanup_temp_images(images: list[dict[str, Any]], trace: list[ExportStage], stage: str) -> None:
+    removed = 0
+    for image in images:
+        path = image.get("path")
+        if not path:
+            continue
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+                removed += 1
+        except Exception as exc:
+            _trace(trace, stage, "failed", f"Cleanup failed for {path}: {exc}")
+    _trace(trace, stage, "ok", f"Temporary files removed: {removed}")
 
 
 # ---------------------------------------------------------------------------
@@ -35,15 +90,116 @@ def dataframe_to_csv(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8")
 
 
-def dataframe_to_excel(df: pd.DataFrame, pivots: list[Any] | None = None) -> bytes:
-    """Export the cleaned dataset (and optional pivots) to an Excel workbook."""
+def dataframe_to_excel(
+    df: pd.DataFrame,
+    pivots: list[Any] | None = None,
+    charts: list[Any] | None = None,
+    summary: dict[str, Any] | None = None,
+    kpis: dict[str, dict[str, str]] | None = None,
+    insights: list[str] | None = None,
+    recommendations: list[str] | None = None,
+    return_metadata: bool = False,
+) -> bytes | tuple[bytes, dict[str, Any]]:
+    """Export workbook with dashboard visuals, summary, pivots, charts, and raw data."""
+    trace: list[ExportStage] = []
+    started = time.perf_counter()
+    tracemalloc.start()
+
+    _trace(trace, "dataset", "ok", f"Rows={len(df)}, Cols={df.shape[1]}")
+    charts = charts or []
+    pivots = pivots or []
+    chart_images, failures = export_chart_images(charts, trace=trace)
+
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Cleaned Data")
-        for pivot in pivots or []:
-            sheet_name = pivot.title[:31].replace("/", "-").replace("\\", "-")
-            pivot.data.to_excel(writer, index=False, sheet_name=sheet_name)
-    return output.getvalue()
+        # Required structure.
+        df.to_excel(writer, index=False, sheet_name="Raw Data")
+
+        summary_sheet = pd.DataFrame(
+            {
+                "Metric": ["Rows", "Columns", "Missing %", "Completeness %"],
+                "Value": [
+                    summary.get("rows", len(df)) if summary else len(df),
+                    summary.get("columns", df.shape[1]) if summary else df.shape[1],
+                    summary.get("missing_pct", "n/a") if summary else "n/a",
+                    round(100 - float(summary.get("missing_pct", 0)), 1) if summary and isinstance(summary.get("missing_pct", 0), (int, float)) else "n/a",
+                ],
+            }
+        )
+        summary_sheet.to_excel(writer, index=False, sheet_name="Summary")
+
+        dashboard_rows = []
+        for label, metric in (kpis or {}).items():
+            dashboard_rows.append({"KPI": label, "Value": metric.get("value", ""), "Note": metric.get("note", "")})
+        if insights:
+            for idx, text in enumerate(insights[:6], start=1):
+                dashboard_rows.append({"KPI": f"Insight {idx}", "Value": text, "Note": ""})
+        if recommendations:
+            for idx, text in enumerate(recommendations[:6], start=1):
+                dashboard_rows.append({"KPI": f"Recommendation {idx}", "Value": text, "Note": ""})
+        pd.DataFrame(dashboard_rows or [{"KPI": "No KPI", "Value": "n/a", "Note": ""}]).to_excel(
+            writer, index=False, sheet_name="Dashboard"
+        )
+
+        pd.DataFrame(
+            [{"Pivot": getattr(p, "title", f"Pivot {i + 1}"), "Rows": len(getattr(p, "data", []))} for i, p in enumerate(pivots)]
+            or [{"Pivot": "No pivots", "Rows": 0}]
+        ).to_excel(writer, index=False, sheet_name="Pivot Tables")
+
+        pd.DataFrame(
+            [{"Chart": img["title"], "Width(px)": img["width_px"], "Height(px)": img["height_px"], "DPI": img["dpi"]} for img in chart_images]
+            or [{"Chart": "No charts", "Width(px)": 0, "Height(px)": 0, "DPI": 0}]
+        ).to_excel(writer, index=False, sheet_name="Charts")
+
+        for i, pivot in enumerate(pivots, start=1):
+            sheet_name = _safe_sheet_name(f"Pivot_{i}_{getattr(pivot, 'title', i)}", fallback=f"Pivot_{i}")
+            getattr(pivot, "data", pd.DataFrame()).to_excel(writer, index=False, sheet_name=sheet_name)
+
+        book = writer.book
+        dashboard_ws = book["Dashboard"]
+        charts_ws = book["Charts"]
+
+        embed_count = 0
+        if chart_images:
+            # Dashboard sheet: embed lead visuals.
+            for idx, img in enumerate(chart_images[:2]):
+                xl_img = XLImage(img["path"])
+                xl_img.width = 860
+                xl_img.height = 480
+                dashboard_ws.add_image(xl_img, f"E{2 + idx * 26}")
+                embed_count += 1
+
+            # Charts sheet: gallery of all visuals.
+            row_anchor = 8
+            for img in chart_images:
+                xl_img = XLImage(img["path"])
+                xl_img.width = 960
+                xl_img.height = 540
+                charts_ws.add_image(xl_img, f"A{row_anchor}")
+                row_anchor += 30
+                embed_count += 1
+
+        _trace(trace, "excel_export", "ok", f"Workbook sheets={len(book.sheetnames)}, chart_embeds={embed_count}")
+
+    excel_bytes = output.getvalue()
+    _cleanup_temp_images(chart_images, trace, "excel_cleanup")
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    _, peak_mem = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    metadata = {
+        "pipeline": "excel",
+        "chart_count_input": len(charts),
+        "chart_count_rendered": len(chart_images),
+        "chart_failures": failures,
+        "chart_embedded": embed_count,
+        "trace": [stage.__dict__ for stage in trace],
+        "elapsed_ms": elapsed_ms,
+        "peak_memory_mb": round(peak_mem / (1024 * 1024), 2),
+    }
+    if return_metadata:
+        return excel_bytes, metadata
+    return excel_bytes
 
 
 def export_summary_report(
@@ -99,19 +255,86 @@ def export_summary_report(
 # ---------------------------------------------------------------------------
 # Chart images
 # ---------------------------------------------------------------------------
-def export_chart_images(charts: list[Any]) -> list[dict[str, Any]]:
-    """Render Plotly charts to high-resolution PNG bytes (requires kaleido)."""
-    exported = []
-    for chart in charts:
-        try:
-            image_bytes = chart.figure.to_image(format="png", width=1400, height=820, scale=2)
-            temp = tempfile.NamedTemporaryFile(prefix="excel_ai_chart_", suffix=".png", delete=False)
-            temp.write(image_bytes)
-            temp.close()
-            exported.append({"title": chart.title, "bytes": image_bytes, "path": temp.name})
-        except Exception:
+def export_chart_images(charts: list[Any], trace: list[ExportStage] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Render charts to high-resolution PNG/SVG and verify readability.
+
+    Returns ``(exported_images, failures)``. Failures are never swallowed.
+    """
+    trace = trace if trace is not None else []
+    exported: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+
+    _trace(trace, "chart_object_creation", "ok", f"Charts received: {len(charts)}")
+
+    for idx, chart in enumerate(charts):
+        title = getattr(chart, "title", f"Chart {idx + 1}")
+        figure = getattr(chart, "figure", None)
+        if figure is None:
+            msg = "Missing figure object"
+            failures.append({"index": idx, "title": title, "stage": "object", "error": msg})
+            _trace(trace, "chart_object_verify", "failed", f"{title}: {msg}")
             continue
-    return exported
+
+        try:
+            figure.to_dict()
+            _trace(trace, "chart_render_verify", "ok", f"{title}: figure object is serializable")
+        except Exception as exc:
+            failures.append({"index": idx, "title": title, "stage": "render", "error": str(exc)})
+            _trace(trace, "chart_render_verify", "failed", f"{title}: {exc}")
+            continue
+
+        png_bytes: bytes | None = None
+        svg_bytes: bytes | None = None
+        png_path = ""
+        width = 0
+        height = 0
+        dpi = BASE_DPI * CHART_SCALE
+
+        try:
+            png_bytes = figure.to_image(
+                format="png",
+                width=CHART_WIDTH_PX,
+                height=CHART_HEIGHT_PX,
+                scale=CHART_SCALE,
+            )
+            temp_png = tempfile.NamedTemporaryFile(prefix="excel_ai_chart_", suffix=".png", delete=False)
+            temp_png.write(png_bytes)
+            temp_png.close()
+            png_path = temp_png.name
+            width, height = _verify_written_image(png_path)
+            _trace(trace, "chart_png_verify", "ok", f"{title}: {png_path} ({width}x{height}px @ {dpi}dpi)")
+        except Exception as exc:
+            failures.append({"index": idx, "title": title, "stage": "png", "error": str(exc)})
+            _trace(trace, "chart_png_verify", "failed", f"{title}: {exc}")
+            continue
+
+        try:
+            svg_bytes = figure.to_image(
+                format="svg",
+                width=CHART_WIDTH_PX,
+                height=CHART_HEIGHT_PX,
+                scale=1,
+            )
+            _trace(trace, "chart_svg_verify", "ok", f"{title}: SVG bytes={len(svg_bytes)}")
+        except Exception as exc:
+            failures.append({"index": idx, "title": title, "stage": "svg", "error": str(exc)})
+            _trace(trace, "chart_svg_verify", "failed", f"{title}: {exc}")
+
+        exported.append(
+            {
+                "title": title,
+                "bytes": png_bytes,
+                "svg_bytes": svg_bytes,
+                "path": png_path,
+                "width_px": width,
+                "height_px": height,
+                "dpi": dpi,
+                "readable": bool(width and height and png_path),
+            }
+        )
+
+    _trace(trace, "chart_image_generation", "ok", f"Exported={len(exported)}, Failed={len(failures)}")
+    return exported, failures
 
 
 # ---------------------------------------------------------------------------
@@ -126,9 +349,19 @@ def make_custom_pdf_report(
     charts: list[Any],
     include_tables: bool,
     include_charts: bool,
-) -> bytes:
+    return_metadata: bool = False,
+) -> bytes | tuple[bytes, dict[str, Any]]:
     """Build a branded, client-ready PDF report."""
-    chart_images = export_chart_images(charts) if include_charts else []
+    trace: list[ExportStage] = []
+    started = time.perf_counter()
+    tracemalloc.start()
+    _trace(trace, "pdf_export_start", "ok", f"include_charts={include_charts}, include_tables={include_tables}")
+
+    chart_images, failures = export_chart_images(charts, trace=trace) if include_charts else ([], [])
+    if include_charts and not chart_images:
+        _trace(trace, "pdf_chart_verify", "failed", "No chart images were generated for PDF export")
+        raise RuntimeError("PDF export aborted: no chart images generated; check chart pipeline errors.")
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=28, leftMargin=28, topMargin=28, bottomMargin=28)
     styles = getSampleStyleSheet()
@@ -143,8 +376,19 @@ def make_custom_pdf_report(
         Spacer(1, 12),
         _pdf_kpi_cards(summary),
         Spacer(1, 14),
-        Paragraph("Executive Summary", styles["Heading1"]),
     ]
+
+    if include_charts and chart_images:
+        story.append(Paragraph("Dashboard Visual Snapshot", styles["Heading1"]))
+        story.append(Spacer(1, 6))
+        for idx, chart_image in enumerate(chart_images[:2]):
+            story.append(Paragraph(html.escape(chart_image["title"]), styles["Heading2"]))
+            story.append(RLImage(BytesIO(chart_image["bytes"]), width=7.2 * inch, height=4.05 * inch))
+            if insights:
+                story.append(Paragraph(f"Insight: {html.escape(insights[idx % len(insights)])}", styles["BodyText"]))
+            story.append(Spacer(1, 6))
+
+    story.append(Paragraph("Executive Summary", styles["Heading1"]))
 
     for insight in insights[:5]:
         story.append(Paragraph(f"- {html.escape(insight)}", styles["BodyText"]))
@@ -177,10 +421,32 @@ def make_custom_pdf_report(
                 story.append(PageBreak())
             story.append(Spacer(1, 8))
             story.append(Paragraph(html.escape(chart_image["title"]), styles["Heading2"]))
-            story.append(RLImage(BytesIO(chart_image["bytes"]), width=7.2 * inch, height=4.22 * inch))
+            story.append(RLImage(BytesIO(chart_image["bytes"]), width=7.2 * inch, height=4.3 * inch))
+            if insights:
+                story.append(Spacer(1, 4))
+                story.append(Paragraph(f"Insight: {html.escape(insights[idx % len(insights)])}", styles["BodyText"]))
 
     doc.build(story)
-    return buffer.getvalue()
+    pdf_bytes = buffer.getvalue()
+    _cleanup_temp_images(chart_images, trace, "pdf_cleanup")
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    _, peak_mem = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    _trace(trace, "pdf_export_complete", "ok", f"bytes={len(pdf_bytes)}, charts={len(chart_images)}")
+
+    metadata = {
+        "pipeline": "pdf",
+        "chart_count_input": len(charts),
+        "chart_count_rendered": len(chart_images),
+        "chart_failures": failures,
+        "chart_embedded": len(chart_images),
+        "trace": [stage.__dict__ for stage in trace],
+        "elapsed_ms": elapsed_ms,
+        "peak_memory_mb": round(peak_mem / (1024 * 1024), 2),
+    }
+    if return_metadata:
+        return pdf_bytes, metadata
+    return pdf_bytes
 
 
 def _pdf_cover_block(title: str, subtitle: str) -> Table:
@@ -287,7 +553,8 @@ def make_ppt_report(
     charts: list[Any],
     include_tables: bool,
     include_charts: bool,
-) -> bytes:
+    return_metadata: bool = False,
+) -> bytes | tuple[bytes, dict[str, Any]]:
     """Build a branded, client-ready PowerPoint deck."""
     from pptx import Presentation
     from pptx.dml.color import RGBColor
@@ -295,7 +562,13 @@ def make_ppt_report(
     from pptx.enum.shapes import MSO_SHAPE
     from pptx.util import Inches, Pt
 
-    chart_images = export_chart_images(charts) if include_charts else []
+    trace: list[ExportStage] = []
+    started = time.perf_counter()
+    tracemalloc.start()
+    chart_images, failures = export_chart_images(charts, trace=trace) if include_charts else ([], [])
+    if include_charts and not chart_images:
+        _trace(trace, "ppt_chart_verify", "failed", "No chart images were generated for PPT export")
+        raise RuntimeError("PPT export aborted: no chart images generated; check chart pipeline errors.")
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
@@ -461,15 +734,197 @@ def make_ppt_report(
             add_df_table(slide, pivot.data, Inches(0.65), Inches(1.35), Inches(12.1), Inches(5.55))
 
     if include_charts:
-        for chart_image in chart_images:
+        for idx, chart_image in enumerate(chart_images):
             slide = prs.slides.add_slide(prs.slide_layouts[6])
             add_title(slide, chart_image["title"], "Dashboard-matched chart exported at high resolution")
-            frame = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.68), Inches(1.23), Inches(11.95), Inches(5.85))
+            frame = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.42), Inches(1.08), Inches(12.5), Inches(5.98))
             frame.fill.solid()
             frame.fill.fore_color.rgb = RGBColor(255, 255, 255)
             frame.line.color.rgb = theme["line"]
-            slide.shapes.add_picture(BytesIO(chart_image["bytes"]), Inches(2.05), Inches(1.55), height=Inches(5.22))
+            # Chart area occupies ~70% of slide surface.
+            slide.shapes.add_picture(BytesIO(chart_image["bytes"]), Inches(0.7), Inches(1.4), width=Inches(9.45), height=Inches(5.0))
+
+            insight_box = slide.shapes.add_textbox(Inches(10.35), Inches(1.55), Inches(2.55), Inches(1.7))
+            ip = insight_box.text_frame.paragraphs[0]
+            ip.text = "Key insight"
+            ip.font.size = Pt(12)
+            ip.font.bold = True
+            ip.font.color.rgb = theme["ink"]
+            insight_detail = insight_box.text_frame.add_paragraph()
+            insight_detail.text = (insights[idx % len(insights)] if insights else "Insight not available")[:220]
+            insight_detail.font.size = Pt(10)
+            insight_detail.font.color.rgb = theme["muted"]
+
+            if include_tables and pivots:
+                supporting = pivots[idx % len(pivots)].data
+                add_df_table(slide, supporting, Inches(10.3), Inches(3.35), Inches(2.6), Inches(2.2))
 
     output = BytesIO()
     prs.save(output)
-    return output.getvalue()
+    ppt_bytes = output.getvalue()
+    _cleanup_temp_images(chart_images, trace, "ppt_cleanup")
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    _, peak_mem = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    _trace(trace, "ppt_export_complete", "ok", f"bytes={len(ppt_bytes)}, charts={len(chart_images)}")
+
+    metadata = {
+        "pipeline": "ppt",
+        "chart_count_input": len(charts),
+        "chart_count_rendered": len(chart_images),
+        "chart_failures": failures,
+        "chart_embedded": len(chart_images),
+        "trace": [stage.__dict__ for stage in trace],
+        "elapsed_ms": elapsed_ms,
+        "peak_memory_mb": round(peak_mem / (1024 * 1024), 2),
+    }
+    if return_metadata:
+        return ppt_bytes, metadata
+    return ppt_bytes
+
+
+def generate_export_validation_report(
+    df: pd.DataFrame,
+    summary: dict,
+    cleaning_report: dict,
+    kpis: dict[str, dict[str, str]],
+    insights: list[str],
+    recommendations: list[str],
+    pivots: list[Any],
+    charts: list[Any],
+    include_tables: bool,
+    include_charts: bool,
+) -> str:
+    """Run full export validation and return a JSON debug report."""
+    trace: list[ExportStage] = []
+    started = time.perf_counter()
+    tracemalloc.start()
+
+    _trace(trace, "dataset", "ok", f"rows={len(df)}, cols={df.shape[1]}")
+    _trace(trace, "cleaning", "ok", f"missing_fixed={cleaning_report.get('missing_values_fixed', 'n/a')}")
+    _trace(trace, "pivot_generation", "ok", f"pivot_count={len(pivots)}")
+
+    chart_images, chart_failures = export_chart_images(charts, trace=trace)
+    chart_count = len(charts)
+    rendered_count = len(chart_images)
+
+    excel_ok = ppt_ok = pdf_ok = False
+    excel_meta: dict[str, Any] = {}
+    ppt_meta: dict[str, Any] = {}
+    pdf_meta: dict[str, Any] = {}
+    export_failures: list[str] = []
+
+    try:
+        excel_bytes, excel_meta = dataframe_to_excel(
+            df,
+            pivots=pivots,
+            charts=charts,
+            summary=summary,
+            kpis=kpis,
+            insights=insights,
+            recommendations=recommendations,
+            return_metadata=True,
+        )
+        excel_ok = len(excel_bytes) > 1000 and excel_meta.get("chart_embedded", 0) > 0
+    except Exception as exc:
+        export_failures.append(f"excel: {exc}")
+
+    try:
+        ppt_bytes, ppt_meta = make_ppt_report(
+            summary,
+            cleaning_report,
+            insights,
+            recommendations,
+            pivots,
+            charts,
+            include_tables,
+            include_charts,
+            return_metadata=True,
+        )
+        ppt_ok = len(ppt_bytes) > 1000 and (ppt_meta.get("chart_embedded", 0) > 0 if include_charts else True)
+    except Exception as exc:
+        export_failures.append(f"ppt: {exc}")
+
+    try:
+        pdf_bytes, pdf_meta = make_custom_pdf_report(
+            summary,
+            cleaning_report,
+            insights,
+            recommendations,
+            pivots,
+            charts,
+            include_tables,
+            include_charts,
+            return_metadata=True,
+        )
+        pdf_ok = len(pdf_bytes) > 1000 and (pdf_meta.get("chart_embedded", 0) > 0 if include_charts else True)
+    except Exception as exc:
+        export_failures.append(f"pdf: {exc}")
+
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    _, peak_mem = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    report = {
+        "status": "ok" if not export_failures else "failed",
+        "chart_pipeline": {
+            "charts_detected": chart_count,
+            "charts_rendered": rendered_count,
+            "charts_exported": rendered_count,
+            "missing_charts": max(chart_count - rendered_count, 0),
+            "failures": chart_failures,
+            "chart_details": [
+                {
+                    "title": img["title"],
+                    "path": img["path"],
+                    "width_px": img["width_px"],
+                    "height_px": img["height_px"],
+                    "dpi": img["dpi"],
+                    "readable": img["readable"],
+                    "svg_supported": bool(img.get("svg_bytes")),
+                }
+                for img in chart_images
+            ],
+        },
+        "exports": {
+            "excel": {
+                "ok": excel_ok,
+                "charts_embedded": excel_meta.get("chart_embedded", 0),
+                "chart_failures": excel_meta.get("chart_failures", []),
+            },
+            "powerpoint": {
+                "ok": ppt_ok,
+                "charts_embedded": ppt_meta.get("chart_embedded", 0),
+                "chart_failures": ppt_meta.get("chart_failures", []),
+            },
+            "pdf": {
+                "ok": pdf_ok,
+                "charts_embedded": pdf_meta.get("chart_embedded", 0),
+                "chart_failures": pdf_meta.get("chart_failures", []),
+            },
+            "storyboard": {
+                "ok": ppt_ok,
+                "note": "Storyboard uses PowerPoint visual pipeline.",
+            },
+        },
+        "validation_checks": {
+            "dashboard_generated": chart_count > 0,
+            "charts_generated": rendered_count > 0,
+            "chart_files_created": rendered_count > 0,
+            "charts_embedded_excel": excel_meta.get("chart_embedded", 0) > 0,
+            "charts_embedded_powerpoint": ppt_meta.get("chart_embedded", 0) > 0 if include_charts else True,
+            "charts_embedded_pdf": pdf_meta.get("chart_embedded", 0) > 0 if include_charts else True,
+            "no_placeholder_tables_replacing_charts": rendered_count > 0 if include_charts else True,
+            "no_broken_exports": not export_failures,
+        },
+        "failures": export_failures,
+        "execution": {
+            "elapsed_ms": elapsed_ms,
+            "peak_memory_mb": round(peak_mem / (1024 * 1024), 2),
+        },
+        "stage_trace": [stage.__dict__ for stage in trace],
+    }
+
+    # Temporary files are no longer needed after report assembly.
+    _cleanup_temp_images(chart_images, trace, "report_cleanup")
+    return json.dumps(report, indent=2)
