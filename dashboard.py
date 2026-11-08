@@ -413,7 +413,7 @@ def generate_charts(df: pd.DataFrame, column_types: dict[str, list[str]], theme:
 # ---------------------------------------------------------------------------
 # Streamlit UI helpers
 # ---------------------------------------------------------------------------
-def inject_styles(theme: dict | None = None) -> None:
+def inject_styles(theme=None):
     """Inject CSS using the client's selected color theme."""
     theme = theme or get_default_theme()
     accent = theme["accent"]
@@ -422,151 +422,214 @@ def inject_styles(theme: dict | None = None) -> None:
     sidebar_from = theme["sidebar_from"]
     sidebar_to = theme["sidebar_to"]
     surface_soft = theme["surface_soft"]
-    st.markdown(
-        f"""
-        <style>
-        :root {{
-            --surface: #ffffff;
-            --surface-soft: {surface_soft};
-            --card-bg: rgba(255,255,255,.94);
-            --card-border: rgba(148, 163, 184, .28);
-            --ink: {theme["ink"]};
-            --muted: {theme["muted"]};
-            --accent: {accent};
-            --accent-dark: {accent_dark};
-            --success: {theme["success"]};
-            --warning: {theme["warning"]};
-        }}
-        .stApp {{
-            background:
-                linear-gradient(135deg, rgba({gradient_rgb},.12), transparent 28rem),
-                linear-gradient(180deg, {surface_soft} 0%, #eef2f7 100%);
-            color: var(--ink);
-            font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
-        }}
-        .block-container {{ padding-top: 1.3rem; padding-bottom: 2.4rem; max-width: 1480px; }}
-        [data-testid="stSidebar"] {{
-            background: linear-gradient(180deg, {sidebar_from} 0%, {sidebar_to} 100%);
-            color: #fff;
-            border-right: 1px solid rgba(255,255,255,.08);
-        }}
-        [data-testid="stSidebar"] * {{ color: inherit; }}
-        [data-testid="stSidebar"] [data-testid="stFileUploader"] {{
-            border: 1px solid rgba(255,255,255,.16);
-            background: rgba(255,255,255,.06);
-            border-radius: 8px;
-            padding: .55rem;
-        }}
-        .hero {{ padding: 1.3rem 0 1.05rem; border-bottom: 1px solid rgba(148,163,184,.22); margin-bottom: .4rem; }}
-        .hero h1 {{ font-size: clamp(2rem, 4vw, 3.4rem); line-height: 1.05; margin: 0; color: var(--ink); }}
-        .hero p {{ color: var(--muted); font-size: 1.05rem; margin-top: .65rem; max-width: 58rem; }}
-        .dashboard-banner {{
-            background: linear-gradient(135deg, {accent} 0%, {accent_dark} 100%);
-            color: #fff;
-            border-radius: 12px;
-            padding: 1.1rem 1.35rem;
-            margin-bottom: 1.1rem;
-            box-shadow: 0 14px 36px rgba({gradient_rgb},.28);
-        }}
-        .dashboard-banner h3 {{ margin: 0; font-size: 1.35rem; font-weight: 750; color: #fff; }}
-        .dashboard-banner p {{ margin: .35rem 0 0; font-size: .92rem; color: rgba(255,255,255,.88); }}
-        .metric-card {{
-            border: 1px solid var(--card-border);
-            background: var(--card-bg);
-            border-radius: 12px;
-            padding: 1rem 1.1rem;
-            box-shadow: 0 12px 32px rgba(15,23,42,.08);
-            min-height: 112px;
-            transition: transform .15s ease, box-shadow .15s ease;
-        }}
-        .metric-card:hover {{
-            transform: translateY(-2px);
-            box-shadow: 0 16px 40px rgba(15,23,42,.12);
-        }}
-        .metric-card .label {{ color: var(--muted); font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; }}
-        .metric-card .value {{ color: var(--ink); font-size: 1.85rem; font-weight: 750; margin-top: .3rem; overflow-wrap: anywhere; }}
-        .metric-card .note {{ color: var(--muted); font-size: .9rem; margin-top: .2rem; }}
-        .chart-accent-bar {{
-            height: 5px;
-            border-radius: 10px 10px 0 0;
-            margin-top: .65rem;
-        }}
-        div[data-testid="stPlotlyChart"] {{
-            border: 1px solid rgba(148,163,184,.22);
-            border-radius: 0 0 12px 12px;
-            background: rgba(255,255,255,.95);
-            padding: .25rem;
-            margin-bottom: 1.1rem;
-            box-shadow: 0 10px 28px rgba(15,23,42,.06);
-        }}
-        .section-title {{ font-size: 1.35rem; font-weight: 760; margin: 1.55rem 0 .7rem; color: var(--ink); }}
-        .insight {{
-            border-left: 4px solid {accent};
-            background: rgba(255,255,255,.88);
-            border-radius: 8px;
-            padding: .8rem 1rem;
-            margin-bottom: .65rem;
-            color: #1d2939;
-            box-shadow: 0 8px 24px rgba(15,23,42,.05);
-        }}
-        .warning {{ border-left-color: {theme["warning"]}; }}
-        div[data-testid="stDataFrame"] {{
-            border: 1px solid rgba(148,163,184,.28);
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 10px 26px rgba(15,23,42,.05);
-        }}
-        .stTabs [data-baseweb="tab-list"] {{
-            gap: .35rem;
-            background: rgba(255,255,255,.78);
-            border: 1px solid rgba(148,163,184,.24);
-            border-radius: 8px;
-            padding: .35rem;
-        }}
-        .stTabs [data-baseweb="tab"] {{ border-radius: 7px; color: #475569; font-weight: 650; padding: .6rem .85rem; }}
-        .stTabs [aria-selected="true"] {{ background: {sidebar_from}; color: #ffffff; }}
-        div[data-testid="stFileUploader"] {{
-            background: rgba(255,255,255,.92);
-            border: 1px dashed rgba({gradient_rgb},.45);
-            border-radius: 8px;
-            padding: .65rem;
-        }}
-        .stButton > button, .stDownloadButton > button {{
-            background: linear-gradient(180deg, var(--accent), var(--accent-dark));
-            color: #ffffff;
-            border: 0;
-            border-radius: 8px;
-            padding: .62rem 1rem;
-            font-weight: 700;
-            box-shadow: 0 8px 18px rgba({gradient_rgb},.28);
-            transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
-        }}
-        .stButton > button:hover, .stDownloadButton > button:hover {{
-            color: #ffffff;
-            background: linear-gradient(180deg, {accent_dark}, {sidebar_from});
-            border: 0;
-            transform: translateY(-1px);
-            box-shadow: 0 12px 24px rgba({gradient_rgb},.35);
-        }}
-        .stButton > button:active, .stDownloadButton > button:active,
-        .stButton > button:focus, .stDownloadButton > button:focus {{
-            color: #ffffff; border: 0; outline: 2px solid rgba({gradient_rgb},.28);
-        }}
-        div[role="radiogroup"] {{
-            background: rgba(255,255,255,.86);
-            border: 1px solid rgba(148,163,184,.28);
-            border-radius: 8px;
-            padding: .45rem .65rem;
-        }}
-        div[role="radiogroup"] label {{ color: #334155; font-weight: 650; }}
-        .stAlert {{ border-radius: 8px; }}
-        h1, h2, h3, p, label {{ letter-spacing: 0; }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
+    ink = theme["ink"]
+    muted = theme["muted"]
+    success = theme["success"]
+    warning = theme["warning"]
+    
+    css_parts = []
+    css_parts.append('<style>')
+    
+    # :root block
+    css_parts.append(':root {')
+    css_parts.append('--surface: #ffffff;')
+    css_parts.append('--surface-soft: ' + surface_soft + ';')
+    css_parts.append('--card-bg: rgba(255,255,255,.94);')
+    css_parts.append('--card-border: rgba(148, 163, 184, .28);')
+    css_parts.append('--ink: ' + ink + ';')
+    css_parts.append('--muted: ' + muted + ';')
+    css_parts.append('--accent: ' + accent + ';')
+    css_parts.append('--accent-dark: ' + accent_dark + ';')
+    css_parts.append('--success: ' + success + ';')
+    css_parts.append('--warning: ' + warning + ';')
+    css_parts.append('}')
+    
+    # .stApp block
+    css_parts.append('.stApp {')
+    css_parts.append('    background:')
+    css_parts.append('        linear-gradient(135deg, rgba(' + gradient_rgb + ',.12), transparent 28rem),')
+    css_parts.append('        linear-gradient(180deg, ' + surface_soft + ' 0%, #eef2f7 100%);')
+    css_parts.append('    color: var(--ink);')
+    css_parts.append('    font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;')
+    css_parts.append('}')
+    
+    # .block-container
+    css_parts.append('.block-container { padding-top: 1.3rem; padding-bottom: 2.4rem; max-width: 1480px; }')
+    
+    # [data-testid="stSidebar"]
+    css_parts.append('[data-testid="stSidebar"] {')
+    css_parts.append('    background: linear-gradient(180deg, ' + sidebar_from + ' 0%, ' + sidebar_to + ' 100%);')
+    css_parts.append('    color: #fff;')
+    css_parts.append('    border-right: 1px solid rgba(255,255,255,.08);')
+    css_parts.append('}')
+    css_parts.append('[data-testid="stSidebar"] * { color: inherit; }')
+    
+    # [data-testid="stSidebar"] [data-testid="stFileUploader"]
+    css_parts.append('[data-testid="stSidebar"] [data-testid="stFileUploader"] {')
+    css_parts.append('    border: 1px solid rgba(255,255,255,.24);')
+    css_parts.append('    background: rgba(255,255,255,.08);')
+    css_parts.append('    border-radius: 8px;')
+    css_parts.append('    padding: .55rem;')
+    css_parts.append('    color: #fff;')
+    css_parts.append('}')
+    css_parts.append('[data-testid="stSidebar"] [data-testid="stFileUploader"] div,')
+    css_parts.append('[data-testid="stSidebar"] [data-testid="stFileUploader"] span,')
+    css_parts.append('[data-testid="stSidebar"] [data-testid="stFileUploader"] label {')
+    css_parts.append('    color: #fff !important;')
+    css_parts.append('    font-weight: 500;')
+    css_parts.append('}')
+    
+    # .hero
+    css_parts.append('.hero { padding: 1.3rem 0 1.05rem; border-bottom: 1px solid rgba(148,163,184,.22); margin-bottom: .4rem; }')
+    css_parts.append('.hero h1 { font-size: clamp(2rem, 4vw, 3.4rem); line-height: 1.05; margin: 0; color: var(--ink); }')
+    css_parts.append('.hero p { color: var(--muted); font-size: 1.05rem; margin-top: .65rem; max-width: 58rem; }')
+    
+    # .dashboard-banner
+    css_parts.append('.dashboard-banner {')
+    css_parts.append('    background: linear-gradient(135deg, ' + accent + ' 0%, ' + accent_dark + ' 100%);')
+    css_parts.append('    color: #fff;')
+    css_parts.append('    border-radius: 12px;')
+    css_parts.append('    padding: 1.1rem 1.35rem;')
+    css_parts.append('    margin-bottom: 1.1rem;')
+    css_parts.append('    box-shadow: 0 14px 36px rgba(' + gradient_rgb + ',.28);')
+    css_parts.append('}')
+    css_parts.append('.dashboard-banner h3 { margin: 0; font-size: 1.35rem; font-weight: 750; color: #fff; }')
+    css_parts.append('.dashboard-banner p { margin: .35rem 0 0; font-size: .92rem; color: rgba(255,255,255,.88); }')
+    
+    # .metric-card
+    css_parts.append('.metric_card {')
+    css_parts.append('    border: 1px solid var(--card-border);')
+    css_parts.append('    background: var(--card-bg);')
+    css_parts.append('    border-radius: 12px;')
+    css_parts.append('    padding: 1rem 1.1rem;')
+    css_parts.append('    box-shadow: 0 12px 32px rgba(15,23,42,.08);')
+    css_parts.append('    min-height: 112px;')
+    css_parts.append('    transition: transform .15s ease, box-shadow .15s ease;')
+    css_parts.append('}')
+    css_parts.append('.metric_card:hover {')
+    css_parts.append('    transform: translateY(-2px);')
+    css_parts.append('    box-shadow: 0 16px 40px rgba(15,23,42,.12);')
+    css_parts.append('}')
+    css_parts.append('.metric_card .label { color: var(--muted); font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; }')
+    css_parts.append('.metric_card .value { color: var(--ink); font-size: 1.85rem; font-weight: 700; margin-top: .3rem; overflow-wrap: anywhere; }')
+    css_parts.append('.metric_card .note { color: var(--muted); font-size: .9rem; margin-top: .2rem; }')
+    
+    # .chart-accent-bar
+    css_parts.append('.chart-accent-bar {')
+    css_parts.append('    height: 5px;')
+    css_parts.append('    border-radius: 10px 10px 0 0;')
+    css_parts.append('    margin-top: .65rem;')
+    css_parts.append('}')
+    
+    # div[data-testid="stPlotlyChart"]
+    css_parts.append('div[data-testid="stPlotlyChart"] {')
+    css_parts.append('    border: 1px solid rgba(148,163,184,.22);')
+    css_parts.append('    border-radius: 0 0 12px 12px;')
+    css_parts.append('    background: rgba(255,255,255,.95);')
+    css_parts.append('    padding: .25rem;')
+    css_parts.append('    margin-bottom: 1.1rem;')
+    css_parts.append('    box-shadow: 0 10px 28px rgba(15,23,42,.06);')
+    css_parts.append('}')
+    
+    # .section-title
+    css_parts.append('.section-title { font-size: 1.35rem; font-weight: 760; margin: 1.55rem 0 .7rem; color: var(--ink); }')
+    
+    # .insight
+    css_parts.append('.insight {')
+    css_parts.append('    border-left: 4px solid ' + accent + ';')
+    css_parts.append('    background: rgba(255,255,255,.88);')
+    css_parts.append('    border-radius: 8px;')
+    css_parts.append('    padding: .8rem 1rem;')
+    css_parts.append('    margin-bottom: .65rem;')
+    css_parts.append('    color: #1d2939;')
+    css_parts.append('    box-shadow: 0 8px 24px rgba(15,23,42,.05);')
+    css_parts.append('}')
+    
+    # .warning
+    css_parts.append('.warning { border-left-color: ' + warning + '; }')
+    
+    # div[data-testid="stDataFrame"]
+    css_parts.append('div[data-testid="stDataFrame"] {')
+    css_parts.append('    border: 1px solid rgba(148,163,184,.28);')
+    css_parts.append('    border-radius: 8px;')
+    css_parts.append('    overflow: hidden;')
+    css_parts.append('    box-shadow: 0 10px 26px rgba(15,23,42,.05);')
+    css_parts.append('}')
+    
+    # .stTabs [data-baseweb="tab-list"]
+    css_parts.append('.stTabs [data-baseweb="tab-list"] {')
+    css_parts.append('    gap: .35rem;')
+    css_parts.append('    background: rgba(255,255,255,.78);')
+    css_parts.append('    border: 1px solid rgba(148,163,184,.24);')
+    css_parts.append('    border-radius: 8px;')
+    css_parts.append('    padding: .35rem;')
+    css_parts.append('}')
+    
+    # .stTabs [data-baseweb="tab"]
+    css_parts.append('.stTabs [data-baseweb="tab"] {')
+    css_parts.append('    border-radius: 7px; color: #475569; font-weight: 650; padding: .6rem .85rem;')
+    css_parts.append('}')
+    
+    # .stTabs [aria-selected="true"]
+    css_parts.append('.stTabs [aria-selected="true"] {')
+    css_parts.append('    background: ' + sidebar_from + '; color: #ffffff;')
+    css_parts.append('}')
+    
+    # div[data-testid="stFileUploader"]
+    css_parts.append('div[data-testid="stFileUploader"] {')
+    css_parts.append('    background: rgba(255,255,255,.92);')
+    css_parts.append('    border: 1px dashed rgba(' + gradient_rgb + ',.45);')
+    css_parts.append('    border-radius: 8px;')
+    css_parts.append('    padding: .65rem;')
+    css_parts.append('}')
+    
+    # .stButton > button, .stDownloadButton > button
+    css_parts.append('.stButton > button, .stDownloadButton > button {')
+    css_parts.append('    background: linear-gradient(180deg, ' + accent + ', ' + accent_dark + ');')
+    css_parts.append('    color: #ffffff;')
+    css_parts.append('    border: 0;')
+    css_parts.append('    border-radius: 8px;')
+    css_parts.append('    padding: .62rem 1rem;')
+    css_parts.append('    font-weight: 700;')
+    css_parts.append('    box-shadow: 0 8px 18px rgba(' + gradient_rgb + ',.28);')
+    css_parts.append('    transition: transform .12s ease, box-shadow .12s ease, background .12s ease;')
+    css_parts.append('}')
+    
+    # .stButton > button:hover, .stDownloadButton > button:hover
+    css_parts.append('.stButton > button:hover, .stDownloadButton > button:hover {')
+    css_parts.append('    color: #ffffff;')
+    css_parts.append('    background: linear-gradient(180deg, ' + accent_dark + ', ' + sidebar_from + ');')
+    css_parts.append('    border: 0;')
+    css_parts.append('    transform: translateY(-1px);')
+    css_parts.append('    box-shadow: 0 12px 24px rgba(' + gradient_rgb + ',.35);')
+    css_parts.append('}')
+    
+    # .stButton > button:active, .stDownloadButton > button:active, etc.
+    css_parts.append('.stButton > button:active, .stDownloadButton > button:active,')
+    css_parts.append('.stButton > button:focus, .stDownloadButton > button:focus {')
+    css_parts.append('    color: #ffffff; border: 0; outline: 2px solid rgba(' + gradient_rgb + ',.28);')
+    css_parts.append('}')
+    
+    # div[role="radiogroup"]
+    css_parts.append('div[role="radiogroup"] {')
+    css_parts.append('    background: rgba(255,255,255,.86);')
+    css_parts.append('    border: 1px solid rgba(148,163,184,.28);')
+    css_parts.append('    border-radius: 8px;')
+    css_parts.append('    padding: .45rem .65rem;')
+    css_parts.append('}')
+    css_parts.append('div[role="radiogroup"] label { color: #334155; font-weight: 650; }')
+    
+    # .stAlert
+    css_parts.append('.stAlert { border-radius: 8px; }')
+    
+    # h1, h2, h3, p, label
+    css_parts.append('h1, h2, h3, p, label { letter-spacing: 0; }')
+    
+    # Close
+    css_parts.append('</style>')
+    
+    full_css = '\n'.join(css_parts)
+    st.markdown(full_css, unsafe_allow_html=True)
 def _html_block(html: str, height: int) -> None:
     """Render HTML via iframe — works when st.markdown escapes or code-blocks markup."""
     components.html(html, height=height, scrolling=False)

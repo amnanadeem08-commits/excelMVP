@@ -14,6 +14,7 @@ CUSTOMIZE:
 from __future__ import annotations
 
 import re
+import warnings
 from typing import Any
 
 import numpy as np
@@ -84,6 +85,17 @@ def _percent_to_numeric(series: pd.Series) -> pd.Series:
     return pd.to_numeric(cleaned, errors="coerce") / 100
 
 
+def _to_datetime(series: pd.Series) -> pd.Series:
+    """``pd.to_datetime`` with format-inference warnings suppressed.
+
+    Type detection probes every object column, which otherwise emits a
+    "Could not infer format" UserWarning per non-date column.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return pd.to_datetime(series, errors="coerce")
+
+
 def detect_column_types(df: pd.DataFrame) -> dict[str, list[str]]:
     """Infer business-friendly column types beyond raw pandas dtypes."""
     types: dict[str, list[str]] = {
@@ -131,7 +143,7 @@ def detect_column_types(df: pd.DataFrame) -> dict[str, list[str]]:
                 types["currency"].append(column)
                 continue
 
-        datetime_try = pd.to_datetime(series, errors="coerce")
+        datetime_try = _to_datetime(series)
         if datetime_try.notna().mean() >= 0.8:
             types["datetime"].append(column)
             continue
@@ -163,7 +175,7 @@ def _fix_types(df: pd.DataFrame, detected: dict[str, list[str]], report: dict[st
 
     for column in detected.get("datetime", []):
         before_missing = clean[column].isna().sum()
-        clean[column] = pd.to_datetime(clean[column], errors="coerce")
+        clean[column] = _to_datetime(clean[column])
         invalid_dates = max(int(clean[column].isna().sum() - before_missing), 0)
         report["invalid_dates_fixed"] += invalid_dates
         report["columns_corrected"] += 1

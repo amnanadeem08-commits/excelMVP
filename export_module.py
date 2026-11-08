@@ -14,7 +14,9 @@ CUSTOMIZE:
 from __future__ import annotations
 
 import html
+import re
 import tempfile
+from datetime import date
 from io import BytesIO
 from typing import Any
 
@@ -24,25 +26,117 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Image as RLImage
-from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
 # ---------------------------------------------------------------------------
 # Spreadsheet exports
 # ---------------------------------------------------------------------------
+# Excel forbids these characters in sheet names (\ / * ? : [ ]).
+_INVALID_SHEET_CHARS = re.compile(r"[\\/*?:\[\]]")
+
+# Characters that can turn a text cell into a formula when a client opens an
+# export in Excel/Sheets (EXPORT.md §3/§4 formula-injection consideration).
+_FORMULA_PREFIXES = ("=", "+", "@", "\t", "\r")
+
+
+def _today() -> str:
+    return date.today().isoformat()
+
+
+def _report_subtitle(summary: dict) -> str:
+    """Cover/subtitle line with generation date and data period when known."""
+    text = f"Client-ready business intelligence report · Generated {_today()}"
+    ranges = summary.get("date_ranges") or []
+    if ranges:
+        text += f" · Data period {ranges[0]['start']} → {ranges[0]['end']}"
+    return text
+
+
+def _guard_formulas(df: pd.DataFrame) -> pd.DataFrame:
+    """Neutralize spreadsheet formula injection in user-supplied text.
+
+    String cells starting with ``=``, ``+``, ``@``, tab or CR get an
+    apostrophe prefix so Excel/Sheets treat them as text. A leading ``-`` is
+    deliberately NOT altered: negative text values ("-50%") are common and
+    corrupting them would hurt real data more than the marginal risk.
+    """
+    guarded = df.copy()
+    for col in guarded.columns:
+        series = guarded[col]
+        if series.dtype == object or pd.api.types.is_string_dtype(series):
+            text = series.astype("string")
+            mask = text.str.startswith(_FORMULA_PREFIXES, na=False)
+            if bool(mask.any()):
+                text[mask] = "'" + text[mask]
+                guarded[col] = text
+    return guarded
+
+
+def _autosize_columns(writer: Any, df: pd.DataFrame, sheet_name: str) -> None:
+    """Set readable (clamped) column widths for one written sheet."""
+    try:
+        worksheet = writer.sheets[sheet_name]
+    except (KeyError, AttributeError):
+        return
+    for idx, col in enumerate(df.columns, start=1):
+        # Special handling: format datetime columns so they don't display ##########
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            # Format dates as MMM DD to fit within reasonable column width,
+            # and set a max width of 18 characters.
+            sample = df[col].head(500).fillna("")
+            # Format each date as "Jan 01" style for width calculation.
+            formatted_dates = [str(v.strftime("%b %d") if pd.notna(v) else "" ) for v in sample.tolist()]
+            lengths = [len(str(col))] + [len(v) for v in formatted_dates]
+            letter = worksheet.cell(row=1, column=idx).column_letter
+            worksheet.column_dimensions[letter].width = min(max(max(lengths, default=10) + 2, 10), 18)
+            # Apply the MMM DD number format to the column so Excel displays properly.
+            worksheet.cell(row=1, column=idx).number_format = "MMM DD"
+            continue
+        sample = df[col].astype("string").head(500).fillna("")
+        lengths = [len(str(col))] + [len(value) for value in sample.tolist()]
+        letter = worksheet.cell(row=1, column=idx).column_letter
+        worksheet.column_dimensions[letter].width = min(max(max(lengths, default=10) + 2, 10), 45)
+
+
+def _sheet_name(title: str, used: set[str]) -> str:
+    """Sanitize a title into a valid, unique Excel sheet name (<= 31 chars).
+
+    Pivot titles are derived from column names, so user data can contain
+    characters Excel rejects (e.g. ``Cost/Unit:2024``). Also deduplicates
+    names that collide after truncation to 31 characters.
+    """
+    name = _INVALID_SHEET_CHARS.sub("-", str(title))
+    name = " ".join(name.split())[:31].strip() or "Sheet"
+    base = name
+    counter = 2
+    while name in used:
+        suffix = f" ({counter})"
+        name = f"{base[: 31 - len(suffix)].rstrip()}{suffix}"
+        counter += 1
+    used.add(name)
+    return name
+
+
 def dataframe_to_csv(df: pd.DataFrame) -> bytes:
-    """Export a DataFrame to CSV bytes."""
-    return df.to_csv(index=False).encode("utf-8")
+    """Export a DataFrame to CSV bytes (UTF-8, no index, formula-guarded)."""
+    return _guard_formulas(df).to_csv(index=False).encode("utf-8")
 
 
 def dataframe_to_excel(df: pd.DataFrame, pivots: list[Any] | None = None) -> bytes:
     """Export the cleaned dataset (and optional pivots) to an Excel workbook."""
     output = BytesIO()
+    used: set[str] = set()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Cleaned Data")
+        first = _sheet_name("Cleaned Data", used)
+        main = _guard_formulas(df)
+        main.to_excel(writer, index=False, sheet_name=first)
+        _autosize_columns(writer, main, first)
         for pivot in pivots or []:
-            sheet_name = pivot.title[:31].replace("/", "-").replace("\\", "-")
-            pivot.data.to_excel(writer, index=False, sheet_name=sheet_name)
+            sheet = _sheet_name(pivot.title, used)
+            data = _guard_formulas(pivot.data)
+            data.to_excel(writer, index=False, sheet_name=sheet)
+            _autosize_columns(writer, data, sheet)
     return output.getvalue()
 
 
@@ -60,7 +154,9 @@ def export_summary_report(
     one sheet per pivot table.
     """
     output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+    used: set[str] = {"Overview", "KPIs", "Cleaning Report", "Insights", "Recommendations"}
+    writer = pd.ExcelWriter(output, engine="openpyxl")
+    try:
         overview = pd.DataFrame(
             {
                 "Metric": ["Rows", "Columns", "Missing %", "Completeness %", "Numeric Fields", "Categorical Fields", "Datetime Fields"],
@@ -76,11 +172,13 @@ def export_summary_report(
             }
         )
         overview.to_excel(writer, index=False, sheet_name="Overview")
+        _autosize_columns(writer, overview, "Overview")
 
         kpi_df = pd.DataFrame(
             [{"KPI": label, "Value": metric["value"], "Detail": metric.get("note", "")} for label, metric in kpis.items()]
         )
         kpi_df.to_excel(writer, index=False, sheet_name="KPIs")
+        _autosize_columns(writer, kpi_df, "KPIs")
 
         pd.DataFrame([cleaning_report]).T.reset_index().rename(
             columns={"index": "Step", 0: "Value"}
@@ -90,8 +188,18 @@ def export_summary_report(
         pd.DataFrame({"Recommendation": recommendations}).to_excel(writer, index=False, sheet_name="Recommendations")
 
         for pivot in pivots or []:
-            sheet_name = pivot.title[:31].replace("/", "-").replace("\\", "-")
-            pivot.data.to_excel(writer, index=False, sheet_name=sheet_name)
+            sheet = _sheet_name(pivot.title, used)
+            data = _guard_formulas(pivot.data)
+            data.to_excel(writer, index=False, sheet_name=sheet)
+            _autosize_columns(writer, data, sheet)
+
+        writer.close()
+    except Exception:
+        try:
+            writer.close()
+        except Exception:
+            pass
+        raise
 
     return output.getvalue()
 
@@ -126,9 +234,17 @@ def make_custom_pdf_report(
     charts: list[Any],
     include_tables: bool,
     include_charts: bool,
+    chart_images: list[Any] | None = None,
 ) -> bytes:
-    """Build a branded, client-ready PDF report."""
-    chart_images = export_chart_images(charts) if include_charts else []
+    """Build a branded, client-ready PDF report.
+
+    Pass pre-rendered ``chart_images`` (from ``export_chart_images``) to
+    avoid re-rendering the same charts when both PDF and PPT are built.
+    """
+    if not include_charts:
+        chart_images = []
+    elif chart_images is None:
+        chart_images = export_chart_images(charts)
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=28, leftMargin=28, topMargin=28, bottomMargin=28)
     styles = getSampleStyleSheet()
@@ -139,7 +255,7 @@ def make_custom_pdf_report(
     styles["BodyText"].fontSize = 9.5
     styles["BodyText"].leading = 13
     story = [
-        _pdf_cover_block("Excel AI Analytics Assistant", "Client-ready business intelligence report"),
+        _pdf_cover_block("Excel Dashboard Studio", _report_subtitle(summary)),
         Spacer(1, 12),
         _pdf_kpi_cards(summary),
         Spacer(1, 14),
@@ -165,9 +281,17 @@ def make_custom_pdf_report(
         story.append(PageBreak())
         story.append(Paragraph("Pivot Tables", styles["Heading1"]))
         for pivot in pivots[:6]:
-            story.append(Spacer(1, 8))
-            story.append(Paragraph(html.escape(pivot.title), styles["Heading2"]))
-            story.append(_dataframe_pdf_table(pivot.data.head(12)))
+            # Keep each heading with its table so headings never orphan at a
+            # page bottom with the table alone on the next page.
+            story.append(
+                KeepTogether(
+                    [
+                        Spacer(1, 8),
+                        Paragraph(html.escape(pivot.title), styles["Heading2"]),
+                        _dataframe_pdf_table(pivot.data.head(12)),
+                    ]
+                )
+            )
 
     if include_charts and chart_images:
         story.append(PageBreak())
@@ -260,7 +384,9 @@ def _dataframe_pdf_table(df: pd.DataFrame) -> Table:
 
 
 def _styled_table(rows: list[list[str]]) -> Table:
-    table = Table(rows, hAlign="LEFT", colWidths=[180, 300])
+    # Wider first column to prevent clipping of cleaning-report labels;
+    # second column adjusted accordingly. Text wrapping enabled via PADDING.
+    table = Table(rows, hAlign="LEFT", colWidths=[250, 250])
     table.setStyle(
         TableStyle(
             [
@@ -268,7 +394,10 @@ def _styled_table(rows: list[list[str]]) -> Table:
                 ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor("#172033")),
                 ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D0D5DD")),
                 ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("FONTNAME", (1, 0), (-1, -1), "Helvetica"),
                 ("PADDING", (0, 0), (-1, -1), 7),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("WRAP", (0, 0), (-1, -1), True),
             ]
         )
     )
@@ -287,15 +416,23 @@ def make_ppt_report(
     charts: list[Any],
     include_tables: bool,
     include_charts: bool,
+    chart_images: list[Any] | None = None,
 ) -> bytes:
-    """Build a branded, client-ready PowerPoint deck."""
+    """Build a branded, client-ready PowerPoint deck.
+
+    Pass pre-rendered ``chart_images`` (from ``export_chart_images``) to
+    avoid re-rendering the same charts when both PDF and PPT are built.
+    """
     from pptx import Presentation
     from pptx.dml.color import RGBColor
     from pptx.enum.text import PP_ALIGN
     from pptx.enum.shapes import MSO_SHAPE
     from pptx.util import Inches, Pt
 
-    chart_images = export_chart_images(charts) if include_charts else []
+    if not include_charts:
+        chart_images = []
+    elif chart_images is None:
+        chart_images = export_chart_images(charts)
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
@@ -334,6 +471,12 @@ def make_ppt_report(
             sp.text = subtitle
             sp.font.size = Pt(11)
             sp.font.color.rgb = theme["muted"]
+        # Consistent footer: product name + generation date (PRESENTATION.md §3).
+        footer = slide.shapes.add_textbox(Inches(0.55), Inches(7.08), Inches(12.2), Inches(0.28))
+        fp = footer.text_frame.paragraphs[0]
+        fp.text = f"Excel Dashboard Studio · Generated {_today()}"
+        fp.font.size = Pt(9)
+        fp.font.color.rgb = theme["muted"]
 
     def add_card(slide, x, y, w, h, label: str, value: str, accent):
         shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h)
@@ -415,13 +558,20 @@ def make_ppt_report(
     ribbon.line.fill.background()
     title_box = title_slide.shapes.add_textbox(Inches(0.85), Inches(0.85), Inches(8.8), Inches(1.2))
     p = title_box.text_frame.paragraphs[0]
-    p.text = "Excel AI Analytics Assistant"
+    p.text = "Excel Dashboard Studio"
     p.font.size = Pt(34)
     p.font.bold = True
     p.font.color.rgb = RGBColor(255, 255, 255)
-    sub_box = title_slide.shapes.add_textbox(Inches(0.9), Inches(1.95), Inches(7.5), Inches(0.5))
+    sub_box = title_slide.shapes.add_textbox(Inches(0.9), Inches(1.95), Inches(9.5), Inches(0.5))
     sp = sub_box.text_frame.paragraphs[0]
-    sp.text = "Client-ready analytics export with automated insights, pivots, and dashboard visuals"
+    sp.text = (
+        f"Client-ready analytics export · Generated {_today()}"
+        + (
+            f" · Data period {summary['date_ranges'][0]['start']} → {summary['date_ranges'][0]['end']}"
+            if summary.get("date_ranges")
+            else ""
+        )
+    )
     sp.font.size = Pt(14)
     sp.font.color.rgb = RGBColor(203, 213, 225)
     kpi_values = [
@@ -445,7 +595,19 @@ def make_ppt_report(
             f"{summary['numeric_count']:,} numeric fields and {summary['categorical_count']:,} segment fields detected.",
         ],
     )
-    add_bullets(title_slide, Inches(7.05), Inches(4.75), Inches(5.45), Inches(1.75), "AI recommendations", recommendations)
+    add_bullets(
+        title_slide,
+        Inches(7.05),
+        Inches(4.75),
+        Inches(5.45),
+        Inches(1.75),
+        "Data scope",
+        [
+            f"Rows after cleaning: {summary['rows']:,}; columns: {summary['columns']:,}.",
+            f"Completeness: {100 - summary['missing_pct']:.1f}% of cells present.",
+            f"Duplicates removed: {cleaning_report.get('duplicates_removed', 0)}.",
+        ],
+    )
 
     insight_slide = prs.slides.add_slide(prs.slide_layouts[6])
     add_title(insight_slide, "AI Insights", "Business-friendly findings generated from the uploaded dataset")
@@ -453,6 +615,35 @@ def make_ppt_report(
         add_card(insight_slide, Inches(0.65 + idx * 3.05), Inches(1.35), Inches(2.65), Inches(1.0), label, value, color)
     add_bullets(insight_slide, Inches(0.75), Inches(2.7), Inches(5.75), Inches(3.95), "Detected insights", insights)
     add_bullets(insight_slide, Inches(6.75), Inches(2.7), Inches(5.75), Inches(3.95), "Recommended actions", recommendations)
+
+    # Data quality & methodology: what was cleaned, with honest caveats
+    # (PRESENTATION.md §2.6, EXECUTIVE_STORY.md §3).
+    method_slide = prs.slides.add_slide(prs.slide_layouts[6])
+    add_title(
+        method_slide,
+        "Data Quality & Methodology",
+        "How the dataset was prepared for this report — description, not prediction",
+    )
+    method_bullets = [
+        f"Working dataset: {summary['rows']:,} rows × {summary['columns']:,} columns after cleaning.",
+        f"Data completeness: {100 - summary['missing_pct']:.1f}% of cells present.",
+        f"{cleaning_report.get('duplicates_removed', 0)} duplicate row(s) removed.",
+        f"{cleaning_report.get('missing_values_fixed', 0)} missing value(s) filled "
+        "(median for measures, mode for categories).",
+        f"{cleaning_report.get('columns_corrected', 0)} column(s) type-corrected "
+        "(dates, currency, percentages).",
+        f"{cleaning_report.get('outliers_capped', 0)} extreme value(s) capped using the 1.5x IQR rule.",
+        "Findings are descriptive of this dataset; no causal or predictive claims are made.",
+    ]
+    add_bullets(
+        method_slide,
+        Inches(0.75),
+        Inches(1.5),
+        Inches(11.8),
+        Inches(4.6),
+        "Automated preparation steps",
+        method_bullets,
+    )
 
     if include_tables:
         for pivot in pivots:

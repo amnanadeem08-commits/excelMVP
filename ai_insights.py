@@ -1,4 +1,5 @@
-"""AI insight layer.
+"""
+AI insight layer.
 
 Generates business-friendly insights, recommendations, and a plain-language
 explanation of the dataset. Works fully offline with rule-based logic, and
@@ -23,6 +24,7 @@ from analytics_engine import (
     categorical_dimensions,
     compute_growth,
     best_numeric_column,
+    measure_semantics,
     numeric_measures,
     top_categories,
 )
@@ -31,6 +33,7 @@ from data_cleaning import detect_column_types
 
 # CUSTOMIZE: keyword fingerprints used to guess the business domain of a file.
 # The domain with the most column-name matches wins.
+
 DATASET_TYPE_KEYWORDS: dict[str, list[str]] = {
     "sales": ["sales", "revenue", "order", "customer", "product", "quantity", "discount", "price", "region", "channel"],
     "finance": ["revenue", "expense", "cost", "profit", "budget", "account", "balance", "transaction", "invoice", "tax", "cash", "margin"],
@@ -47,6 +50,17 @@ DATASET_TYPE_LABELS: dict[str, str] = {
     "marketing": "marketing / campaign performance data",
     "general": "general business data",
 }
+
+
+def _growth_agg(column_types: dict, measure: str) -> str:
+    """Determine aggregation method for growth calculation.
+
+    Returns 'mean' for continuous/rate measures, 'sum' for additive measures.
+    """
+    semantics = measure_semantics(measure, column_types)
+    if semantics in ("continuous", "rate"):
+        return "mean"
+    return "sum"
 
 
 def generate_insights(df: pd.DataFrame, summary: dict, column_types: dict[str, list[str]], pivots: list | None = None) -> list[str]:
@@ -85,7 +99,10 @@ def generate_insights(df: pd.DataFrame, summary: dict, column_types: dict[str, l
                 f"{measure} has unusually high peak values that deserve review for opportunities or data quality issues."
             )
 
-    growth = compute_growth(df, column_types)
+    # Growth respects measure semantics: totals for additive measures,
+    # monthly averages for continuous/rate measures (no misleading sums).
+    _growth_measure = best_numeric_column(df, column_types)
+    growth = compute_growth(df, column_types, _growth_measure, agg=_growth_agg(column_types, _growth_measure))
     if growth:
         direction = "increasing" if growth["growth_pct"] >= 0 else "declining"
         insights.append(
@@ -170,7 +187,10 @@ def explain_dataset(df: pd.DataFrame, summary: dict, column_types: dict[str, lis
         leader = top["ranking"].index[0]
         parts.append(f"The leading {top['dimension']} by {top['measure']} is '{leader}'.")
 
-    growth = compute_growth(df, column_types)
+    # Growth respects measure semantics: totals for additive measures,
+    # monthly averages for continuous/rate measures (no misleading sums).
+    _growth_measure = best_numeric_column(df, column_types)
+    growth = compute_growth(df, column_types, _growth_measure, agg=_growth_agg(column_types, _growth_measure))
     if growth:
         trend = "grown" if growth["growth_pct"] >= 0 else "declined"
         parts.append(f"Overall, {growth['measure']} has {trend} {abs(growth['growth_pct']):.0f}% across the period.")
@@ -308,108 +328,6 @@ def detect_anomalies(df: pd.DataFrame, column_types: dict[str, list[str]]) -> li
     return anomalies[:8]
 
 
-def _build_dataset_summary(df: pd.DataFrame, summary: dict, column_types: dict[str, list[str]]) -> dict:
-    """Build the compact, structured summary that is fed to the LLM.
-
-    Includes shape, column names, basic stats (mean/sum/min/max), and top
-    categories — exactly the context the AI needs to reason about the data.
-    """
-    measures = numeric_measures(df, column_types)
-    stats: dict[str, dict[str, float]] = {}
-    for measure in measures[:8]:
-        series = df[measure].dropna()
-        if series.empty:
-            continue
-        stats[measure] = {
-            "sum": round(float(series.sum()), 2),
-            "mean": round(float(series.mean()), 2),
-            "min": round(float(series.min()), 2),
-            "max": round(float(series.max()), 2),
-        }
-
-    top_cats: dict[str, dict] = {}
-    measure = best_numeric_column(df, column_types)
-    for cat in categorical_dimensions(df, column_types)[:3]:
-        if measure:
-            ranking = df.groupby(cat)[measure].sum().sort_values(ascending=False).head(5)
-        else:
-            ranking = df[cat].value_counts().head(5)
-        top_cats[cat] = {str(k): round(float(v), 2) for k, v in ranking.items()}
-
-    return {
-        "rows": summary["rows"],
-        "columns": summary["columns"],
-        "column_names": list(df.columns),
-        "primary_metric": measure,
-        "stats": stats,
-        "top_categories": top_cats,
-    }
-
-
-def _build_prompt(dataset_type: str, dataset_desc: str, structured_summary: dict) -> str:
-    """Convert the structured summary into an LLM prompt."""
-    return (
-        "You are a senior business analyst. Analyze the dataset summary below and respond with "
-        "concise, client-friendly business intelligence.\n\n"
-        f"Detected dataset type: {dataset_type} ({dataset_desc})\n"
-        f"Dataset facts (JSON):\n{json.dumps(structured_summary, default=str, indent=2)}\n\n"
-        "Return STRICT JSON with these keys:\n"
-        '  "dataset_summary": a 2-3 sentence plain-language description,\n'
-        '  "key_insights": array of 3-5 short insight strings,\n'
-        '  "anomalies": array of 1-4 problem/anomaly strings,\n'
-        '  "recommendations": array of 3-5 actionable recommendation strings.\n'
-        "Do not include any text outside the JSON object."
-    )
-
-
-def generate_ai_insights(df: pd.DataFrame, column_types: dict[str, list[str]] | None = None) -> dict:
-    """Convert cleaned data into structured, human-readable business insights.
-
-    This is the main entry point for the AI Insights Layer.
-
-    Pipeline:
-      1. Build a dataset summary using pandas (shape, columns, stats, top cats).
-      2. Detect the dataset type and convert the summary into an LLM prompt.
-      3. Send the prompt to an LLM (OpenAI/Claude) when configured.
-      4. Return a structured result. Falls back to a rule-based engine so it
-         works offline with any Excel dataset.
-
-    Returns a dict with keys:
-      ``dataset_type``, ``dataset_summary``, ``key_insights``,
-      ``anomalies``, ``recommendations``, ``ai_powered``, ``prompt``.
-    """
-    if column_types is None:
-        column_types = detect_column_types(df)
-
-    summary = analyze_dataset(df, column_types)
-    dataset_type, dataset_desc = detect_dataset_type(df, column_types)
-    structured_summary = _build_dataset_summary(df, summary, column_types)
-    prompt = _build_prompt(dataset_type, dataset_desc, structured_summary)
-
-    # Rule-based baseline (always available, used as fallback).
-    rule_based = {
-        "dataset_summary": f"{dataset_desc} {explain_dataset(df, summary, column_types)}",
-        "key_insights": _rule_based_key_insights(df, summary, column_types),
-        "anomalies": detect_anomalies(df, column_types),
-        "recommendations": _rule_based_recommendations(df, summary, column_types),
-    }
-
-    result = _llm_structured(prompt) or rule_based
-    # Always keep our deterministic anomaly scan even if the LLM omits it.
-    if not result.get("anomalies"):
-        result["anomalies"] = rule_based["anomalies"]
-
-    return {
-        "dataset_type": dataset_type,
-        "dataset_summary": result["dataset_summary"],
-        "key_insights": result["key_insights"],
-        "anomalies": result["anomalies"],
-        "recommendations": result["recommendations"],
-        "ai_powered": bool(os.getenv("OPENAI_API_KEY")),
-        "prompt": prompt,
-    }
-
-
 def _rule_based_key_insights(df: pd.DataFrame, summary: dict, column_types: dict[str, list[str]]) -> list[str]:
     """Top performer, worst performer, trend, and key patterns (no LLM)."""
     insights: list[str] = []
@@ -425,7 +343,10 @@ def _rule_based_key_insights(df: pd.DataFrame, summary: dict, column_types: dict
                 "and may need attention or repositioning."
             )
 
-    growth = compute_growth(df, column_types)
+    # Growth respects measure semantics: totals for additive measures,
+    # monthly averages for continuous/rate measures (no misleading sums).
+    _growth_measure = best_numeric_column(df, column_types)
+    growth = compute_growth(df, column_types, _growth_measure, agg=_growth_agg(column_types, _growth_measure))
     if growth:
         direction = "growth" if growth["growth_pct"] >= 0 else "decline"
         insights.append(
@@ -532,3 +453,116 @@ def _llm_explain(df: pd.DataFrame, summary: dict, column_types: dict[str, list[s
         return response.choices[0].message.content.strip()
     except Exception:
         return None
+
+
+def generate_ai_insights(
+    df: pd.DataFrame,
+    column_types: dict[str, list[str]] | None = None,
+    domain_context: dict | None = None,
+) -> dict:
+    """Convert cleaned data into structured, human-readable business insights.
+
+    This is the main entry point for the AI Insights Layer.
+
+    Pipeline:
+      1. Build a dataset summary using pandas (shape, columns, stats, top cats).
+      2. Detect the dataset type and convert the summary into an LLM prompt.
+      3. Send the prompt to an LLM (OpenAI/Claude) when configured.
+      4. Return a structured result. Falls back to a rule-based engine so it
+         works offline with any Excel dataset.
+
+    Parameters:
+        domain_context: Domain detection results from detect_domain().
+          In this phase, domain detection does NOT alter insights, anomalies,
+          or recommendations. The parameter is received but the existing
+          logic runs unchanged.
+
+    Returns a dict with keys:
+      ``dataset_type``, ``dataset_summary``, ``key_insights``,
+      ``anomalies``, ``recommendations``, ``ai_powered``, ``prompt``.
+    """
+    # domain_context is accepted but not used in this phase; existing analytics runs unchanged.
+    if column_types is None:
+        column_types = detect_column_types(df)
+
+    summary = analyze_dataset(df, column_types)
+    dataset_type, dataset_desc = detect_dataset_type(df, column_types)
+    structured_summary = _build_dataset_summary(df, summary, column_types)
+    prompt = _build_prompt(dataset_type, dataset_desc, structured_summary)
+
+    # Rule-based baseline (always available, used as fallback).
+    rule_based = {
+        "dataset_summary": f"{dataset_desc} {explain_dataset(df, summary, column_types)}",
+        "key_insights": _rule_based_key_insights(df, summary, column_types),
+        "anomalies": detect_anomalies(df, column_types),
+        "recommendations": _rule_based_recommendations(df, summary, column_types),
+    }
+
+    result = _llm_structured(prompt) or rule_based
+    # Always keep our deterministic anomaly scan even if the LLM omits it.
+    if not result.get("anomalies"):
+        result["anomalies"] = rule_based["anomalies"]
+
+    return {
+        "dataset_type": dataset_type,
+        "dataset_summary": result["dataset_summary"],
+        "key_insights": result["key_insights"],
+        "anomalies": result["anomalies"],
+        "recommendations": result["recommendations"],
+        "ai_powered": bool(os.getenv("OPENAI_API_KEY")),
+        "prompt": prompt,
+    }
+
+
+def _build_dataset_summary(df: pd.DataFrame, summary: dict, column_types: dict[str, list[str]]) -> dict:
+    """Build the compact, structured summary that is fed to the LLM.
+
+    Includes shape, column names, basic stats (mean/sum/min/max), and top
+    categories -- exactly the context the AI needs to reason about the data.
+    """
+    measures = numeric_measures(df, column_types)
+    stats: dict[str, dict[str, float]] = {}
+    for measure in measures[:8]:
+        series = df[measure].dropna()
+        if series.empty:
+            continue
+        stats[measure] = {
+            "sum": round(float(series.sum()), 2),
+            "mean": round(float(series.mean()), 2),
+            "min": round(float(series.min()), 2),
+            "max": round(float(series.max()), 2),
+        }
+
+    top_cats: dict[str, dict] = {}
+    measure = best_numeric_column(df, column_types)
+    for cat in categorical_dimensions(df, column_types)[:3]:
+        if measure:
+            ranking = df.groupby(cat)[measure].sum().sort_values(ascending=False).head(5)
+        else:
+            ranking = df[cat].value_counts().head(5)
+        top_cats[cat] = {str(k): round(float(v), 2) for k, v in ranking.items()}
+
+    return {
+        "rows": summary["rows"],
+        "columns": summary["columns"],
+        "column_names": list(df.columns),
+        "primary_metric": measure,
+        "stats": stats,
+        "top_categories": top_cats,
+    }
+
+
+def _build_prompt(dataset_type: str, dataset_desc: str, structured_summary: dict) -> str:
+    """Convert the structured summary into an LLM prompt."""
+    return (
+        "You are a senior business analyst. Analyze the dataset summary below and respond with "
+        "concise, client-friendly business intelligence.\n\n"
+        f"Detected dataset type: {dataset_type} ({dataset_desc})\n"
+        f"Dataset facts (JSON):\n{json.dumps(structured_summary, default=str, indent=2)}\n\n"
+        "Return STRICT JSON with these keys:\n"
+        '  "dataset_summary": a 2-3 sentence plain-language description,\n'
+        '  "key_insights": array of 3-5 short insight strings,\n'
+        '  "anomalies": array of 1-4 problem/anomaly strings,\n'
+        '  "recommendations": array of 3-5 actionable recommendation strings.\n'
+        "Do not include any text outside the JSON object."
+    )

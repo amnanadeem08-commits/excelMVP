@@ -37,6 +37,7 @@ from export_module import (
     make_custom_pdf_report,
     make_ppt_report,
 )
+from transformations import apply_transforms
 
 st.set_page_config(
     page_title="Excel Automation & AI Reporting Tool",
@@ -117,15 +118,22 @@ def main() -> None:
     column_types = detect_column_types(cleaned_df)
     filtered_df = filter_dataframe(cleaned_df, column_types)
 
-    summary = analyze_dataset(filtered_df, column_types)
-    kpis = build_kpis(filtered_df, summary, column_types)
-    pivots = generate_pivot_tables(filtered_df, column_types)
-    charts = generate_charts(filtered_df, column_types, theme)
-    ai = generate_ai_insights(filtered_df, column_types)
+    # --- Apply transformation steps (deferred to Data Tools tab) ---
+    # Transformations are applied after column selection in the Data Tools tab.
+    # For now, use filtered_df as the base dataframe.
+    transformed_df = filtered_df
+    applied_labels = []
+    errors = []
+
+    summary = analyze_dataset(transformed_df, column_types)
+    kpis = build_kpis(transformed_df, summary, column_types)
+    pivots = generate_pivot_tables(transformed_df, column_types)
+    charts = generate_charts(transformed_df, column_types, theme)
+    ai = generate_ai_insights(transformed_df, column_types)
     insights, recommendations = ai["key_insights"], ai["recommendations"]
 
     tabs = st.tabs(
-        ["Dataset", "Executive Summary", "Dashboard", "Pivot Tables", "AI Insights", "Downloads"]
+        ["Dataset", "Data Tools", "Executive Summary", "Dashboard", "Pivot Tables", "AI Insights", "Downloads"]
     )
 
     # --- Tab 1: Dataset ---
@@ -161,10 +169,201 @@ def main() -> None:
         st.dataframe(pd.DataFrame([cleaning_report]), use_container_width=True, hide_index=True)
         st.dataframe(cleaned_df.head(150), use_container_width=True)
 
-    # --- Tab 2: Executive Summary ---
+    # --- Tab 2: Data Tools ---
     with tabs[1]:
+        _section("Column Selection")
+        # Initialize/refresh column selection state when dataset changes
+        if "selected_columns" not in st.session_state or st.session_state.get("dataset_hash") != str(hash(raw_df.to_string())):
+            st.session_state.selected_columns = list(raw_df.columns)
+            st.session_state.dataset_hash = str(hash(raw_df.to_string()))
+        # Column selection UI
+        _section("Column Selection")
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            st.caption(f"Showing {len(st.session_state.selected_columns)} of {len(raw_df.columns)} columns")
+        with c2:
+            if st.button("Select All", help="Select all columns"):
+                st.session_state.selected_columns = list(raw_df.columns)
+                st.rerun()
+        selected = st.multiselect(
+            "Select columns to retain",
+            options=list(raw_df.columns),
+            default=st.session_state.selected_columns,
+            key="column_selector_v1",
+            help="Choose which columns to include in the cleaned dataset and downstream outputs.",
+        )
+        # Update session state when user changes selection
+        st.session_state.selected_columns = selected
+        # Display validation message if empty selection
+        if not selected:
+            st.warning("No columns selected. At least one column is required for analysis and exports.")
+        # Apply column selection: filter both raw and cleaned dataframes
+        # Preserve the original uploaded dataset; do not mutate it
+        selected_columns_set = set(selected)
+        filtered_raw = raw_df[[col for col in raw_df.columns if col in selected_columns_set]].copy() if selected else raw_df.head(0)
+        filtered_cleaned = cleaned_df[[col for col in cleaned_df.columns if col in selected_columns_set]].copy() if selected else cleaned_df.head(0)
+        # cleaned_selected is the cleaned data with selected columns, used in transformation step config
+        cleaned_selected = filtered_cleaned.copy()
+        # When columns are selected, apply the filter to the cleaning pipeline as well
+        # We need to re-clean with only the selected columns, preserving the cleaning steps
+
+        # --- Transformation Steps UI ---
+        st.subheader("Transformation Steps")
+        if "transform_steps" not in st.session_state:
+            st.session_state.transform_steps = []
+
+        # Display configured steps in order
+        if st.session_state.transform_steps:
+            st.caption(f"{len(st.session_state.transform_steps)} step(s) configured")
+            for i, step in enumerate(st.session_state.transform_steps):
+                with st.expander(f"Step {i+1}: {step}", expanded=False):
+                    op = step.get("op", "") if isinstance(step, dict) else step
+                    if op.startswith("select"):
+                        st.caption("Select columns operation")
+                    elif op.startswith("rename"):
+                        st.caption("Rename column operation")
+                    elif op.startswith("split"):
+                        st.caption("Split column operation")
+                    elif op.startswith("merge"):
+                        st.caption("Merge columns operation")
+                    elif op.startswith("range"):
+                        st.caption("Range filter operation")
+                    elif op.startswith("join"):
+                        st.caption("Join operation")
+                    if st.button(f"Remove step {i+1}", key=f"remove_step_{i}"):
+                        st.session_state.transform_steps.pop(i)
+                        st.rerun()
+        else:
+            st.caption("No transformation steps configured")
+
+        # --- Step Configuration ---
+        st.caption("Add Transformation Step")
+        step_type = st.selectbox("Step type", ["select", "rename", "split", "merge", "range", "join"], key="step_selector")
+
+        # Configuration per step type
+        cfg = {}
+        if step_type == "select":
+            cfg["columns"] = st.multiselect("Columns to retain", options=list(raw_df.columns) if selected else [], key="step_select_cols")
+        elif step_type == "rename":
+            cols = [c for c in cleaned_selected.columns] if selected else []
+            cfg["old"] = st.selectbox("Column to rename", options=cols, key="step_rename_col") if cols else ""
+            cfg["new"] = st.text_input("New column name", key="step_rename_new")
+        elif step_type == "split":
+            cfg["column"] = st.selectbox("Column to split", options=list(cleaned_selected.columns) if selected else [], key="step_split_col") if selected else ""
+            cfg["sep"] = st.text_input("Separator", value=",", key="step_split_sep")
+        elif step_type == "merge":
+            cfg["columns"] = st.multiselect("Columns to merge", options=list(cleaned_selected.columns) if selected else [], key="step_merge_cols") if selected else []
+            cfg["sep"] = st.text_input("Separator", value=" ", key="step_merge_sep")
+            cfg["new_name"] = st.text_input("Target column name", key="step_merge_new_name")
+        elif step_type == "range":
+            cfg["column"] = st.selectbox("Numeric column", options=[c for c in cleaned_selected.columns if pd.api.types.is_numeric_dtype(cleaned_selected[c])] if selected else [], key="step_range_col") if selected else ""
+            c1, c2 = st.columns(2)
+            with c1:
+                cfg["min"] = st.number_input("Minimum", value=0.0, key="step_range_min")
+            with c2:
+                cfg["max"] = st.number_input("Maximum", value=100.0, key="step_range_max")
+        elif step_type == "join":
+            st.caption("Upload a second dataset to join with")
+            join_file = st.file_uploader("Join file", type=["xlsx", "xls", "csv"], key="join_file_uploader")
+            if join_file is not None:
+                right_df = pd.read_csv(join_file) if join_file.name.endswith(".csv") else pd.read_excel(join_file)
+                cfg["right"] = right_df
+                join_keys = [c for c in cleaned_selected.columns if c in right_df.columns] if selected else []
+                cfg["left_key"] = st.selectbox("Left key column", options=join_keys, key="step_join_left") if join_keys else ""
+                cfg["right_key"] = st.selectbox("Right key column", options=list(right_df.columns), key="step_join_right") if right_df.columns.tolist() else ""
+                cfg["how"] = st.selectbox("Join type", options=["left", "inner"], key="step_join_how")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Add Step", type="primary", key="add_step_btn"):
+                # Validate configuration
+                valid = True
+                op = {"op": step_type, **cfg}
+                if step_type == "select":
+                    if not cfg.get("columns"):
+                        st.error("Please select at least one column.")
+                        valid = False
+                elif step_type == "rename":
+                    if not cfg.get("old") or not cfg.get("new"):
+                        st.error("Please specify both old and new column names.")
+                        valid = False
+                elif step_type == "split":
+                    if not cfg.get("column") or not cfg.get("sep"):
+                        st.error("Please specify column and separator.")
+                        valid = False
+                elif step_type == "merge":
+                    if len(cfg.get("columns", [])) < 2:
+                        st.error("Please select at least two columns to merge.")
+                        valid = False
+                elif step_type == "range":
+                    if not cfg.get("column"):
+                        st.error("Please select a numeric column.")
+                        valid = False
+                elif step_type == "join":
+                    if not cfg.get("right") or not cfg.get("left_key") or not cfg.get("right_key"):
+                        st.error("Please configure all join parameters.")
+                        valid = False
+                if valid:
+                    st.session_state.transform_steps.append(op)
+                    st.rerun()
+        with c2:
+            if st.button("Clear Steps"):
+                st.session_state.transform_steps = []
+                st.rerun()
+
+        # --- Apply transformations ---
+        # Ensure cleaned_selected is always defined before use
+        if selected and len(st.session_state.get("selected_columns", [])) > 0:
+            selected_columns_set = set(st.session_state.get("selected_columns", []))
+            cleaned_selected = cleaned_df[[col for col in cleaned_df.columns if col in selected_columns_set]].copy()
+        else:
+            cleaned_selected = pd.DataFrame()
+        
+        if selected and st.session_state.transform_steps:
+            try:
+                transformed_selected, applied_labels, errors = apply_transforms(cleaned_selected, st.session_state.transform_steps)
+            except Exception as e:
+                st.error(f"Transformation error: {e}. Showing untransformed data.")
+                transformed_selected = cleaned_selected
+                applied_labels = []
+                errors = []
+        elif selected:
+            transformed_selected = cleaned_selected
+            applied_labels = []
+            errors = []
+        else:
+            # Empty selection - use empty dataframes
+            raw_selected = pd.DataFrame()
+            cleaned_selected = pd.DataFrame()
+            column_types_selected = detect_column_types(raw_selected) if raw_selected is not None else {}
+            transformed_selected = pd.DataFrame()
+            applied_labels = []
+            errors = []    # --- Propagate transformations to main pipeline ---
+    # Compute filtered_selected: preserves BOTH sidebar filters and column selection
+    selected_columns_set = set(st.session_state.get("selected_columns", []))
+    if selected_columns_set:
+        # Start with filtered_df (has sidebar filters), keep only selected columns
+        filtered_selected = filtered_df[[col for col in filtered_df.columns if col in selected_columns_set]].copy()
+    else:
+        # No column selection: just use filtered_df with sidebar filters preserved
+        filtered_selected = filtered_df
+    # Apply transformation steps if configured, overriding the base transformed_df
+    if "transform_steps" in st.session_state and st.session_state.transform_steps:
+        try:
+            transformed_df, applied_labels, errors = apply_transforms(filtered_selected, st.session_state.transform_steps)
+        except Exception as e:
+            st.error(f"Transformation error: {e}. Showing untransformed data.")
+            transformed_df = filtered_selected
+            applied_labels = []
+            errors = []
+    else:
+        transformed_df = filtered_selected
+
+    with tabs[2]:
+
         _section("Executive Summary")
         render_metric_cards(kpis, theme)
+
 
         _section("Plain-Language Overview")
         _insight(ai["dataset_summary"])
@@ -184,14 +383,14 @@ def main() -> None:
             st.dataframe(pd.DataFrame(summary["date_ranges"]), use_container_width=True, hide_index=True)
 
     # --- Tab 3: Dashboard ---
-    with tabs[2]:
+    with tabs[3]:
         render_dashboard_banner(theme, theme_name, branding)
         render_metric_cards(kpis, theme)
         st.caption("Change the client color scheme anytime from the sidebar. Filters slice data by category and date.")
         render_charts(charts, theme)
 
     # --- Tab 4: Pivot Tables ---
-    with tabs[3]:
+    with tabs[4]:
         _section("Automated Pivot Tables")
         if not pivots:
             st.warning("No valid pivot tables were generated from the available columns.")
@@ -207,7 +406,7 @@ def main() -> None:
                 )
 
     # --- Tab 5: AI Business Insights ---
-    with tabs[4]:
+    with tabs[5]:
         badge = "AI-powered (LLM)" if ai["ai_powered"] else "Rule-based engine"
         type_label = ai["dataset_type"].title()
         st.subheader(f"AI Business Insights ({type_label} data · {badge})")
@@ -235,7 +434,7 @@ def main() -> None:
             st.caption("Tip: set the OPENAI_API_KEY environment variable to generate these sections with an LLM.")
 
     # --- Tab 6: Downloads ---
-    with tabs[5]:
+    with tabs[6]:
         _section("Download Reports")
 
         report_mode = st.radio(
@@ -247,8 +446,8 @@ def main() -> None:
         include_tables = report_mode in {"Tables", "Tables + Charts"}
         include_charts = report_mode in {"Charts", "Tables + Charts"}
 
-        excel_bytes = dataframe_to_excel(cleaned_df, pivots)
-        csv_bytes = dataframe_to_csv(cleaned_df)
+        excel_bytes = dataframe_to_excel(transformed_df, pivots)
+        csv_bytes = dataframe_to_csv(transformed_df)
         summary_bytes = export_summary_report(summary, cleaning_report, kpis, insights, recommendations, pivots)
         pdf_bytes = make_custom_pdf_report(
             summary, cleaning_report, insights, recommendations, pivots, charts, include_tables, include_charts
@@ -261,13 +460,15 @@ def main() -> None:
         d1, d2, d3 = st.columns(3)
         with d1:
             st.download_button(
-                "Cleaned Excel",
+                "Transformed Excel",
                 excel_bytes,
-                file_name="cleaned_analytics_workbook.xlsx",
+                file_name="transformed_analytics_workbook.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
         with d2:
-            st.download_button("Cleaned CSV", csv_bytes, file_name="cleaned_dataset.csv", mime="text/csv")
+            st.download_button(
+                "Transformed CSV", csv_bytes, file_name="transformed_dataset.csv", mime="text/csv"
+            )
         with d3:
             st.download_button(
                 "Summary Report (Excel)",
