@@ -933,7 +933,7 @@ def render_dashboard_banner(theme, theme_name, branding=None):
     import html as html_lib
 
     banner_html = (
-        '<div style="display:flex;align-items:center;gap:14px;'
+        '<div style="display:flex;align-items:center;gap:14px; max-height: 108px; min-height: 96px;'
         'background:linear-gradient(135deg,' + accent + ' 0%,' + accent_dark + ' 100%);'
         'border-radius:12px;padding:16px 20px;'
         'box-shadow:0 12px 30px rgba(0,0,0,.15);font-family:Inter,Segoe UI,system-ui,sans-serif;">'
@@ -945,7 +945,7 @@ def render_dashboard_banner(theme, theme_name, branding=None):
         'Branded dashboard - change colors or logo anytime from the sidebar.</p>'
         '</div></div>'
     )
-    st.markdown(banner_html, height=108 if logo_bytes else 96, unsafe_allow_html=True)
+    st.markdown(banner_html, unsafe_allow_html=True)
 
 
 def render_charts(charts, theme=None, two_column=True):
@@ -957,7 +957,7 @@ def render_charts(charts, theme=None, two_column=True):
     palette = theme["palette"]
 
     def _draw(chart, accent, index):
-        st.markdown('<div style="height:5px;background:' + accent + ';border-radius:6px 6px 0 0;"></div>', height=12)
+        st.markdown('<div style="height:12px;background:' + accent + ';border-radius:6px 6px 0 0;"></div>')
         st.plotly_chart(chart, use_container_width=True, key="plotly_" + str(index) + "_" + chart.title.replace(" ", "_"))
 
     if not two_column:
