@@ -552,3 +552,328 @@ def filter_dataframe(df: pd.DataFrame, column_types: dict[str, list[str]]) -> pd
         )
         filtered = filtered[filtered[column].isin(selected)]
     return filtered
+
+# ---------------------------------------------------------------------------
+# Streamlit UI helpers (restored from v2 for app.py imports)
+# ---------------------------------------------------------------------------
+
+def inject_styles(theme=None):
+    """Inject CSS using the client's selected color theme."""
+    theme = theme or get_default_theme()
+    accent = theme["accent"]
+    accent_dark = theme["accent_dark"]
+    gradient_rgb = theme["gradient_rgb"]
+    sidebar_from = theme["sidebar_from"]
+    sidebar_to = theme["sidebar_to"]
+    surface_soft = theme["surface_soft"]
+    ink = theme["ink"]
+    muted = theme["muted"]
+    success = theme["success"]
+    warning = theme["warning"]
+
+    css_parts = []
+    css_parts.append("<style>")
+
+    # :root block
+    css_parts.append(":root {")
+    css_parts.append("--surface: #ffffff;")
+    css_parts.append("--surface-soft: " + surface_soft + ";")
+    css_parts.append("--card-bg: rgba(255,255,255,.94);")
+    css_parts.append("--card-border: rgba(148, 163, 184, .28);")
+    css_parts.append("--ink: " + ink + ";")
+    css_parts.append("--muted: " + muted + ";")
+    css_parts.append("--accent: " + accent + ";")
+    css_parts.append("--accent-dark: " + accent_dark + ";")
+    css_parts.append("--success: " + success + ";")
+    css_parts.append("--warning: " + warning + ";")
+    css_parts.append("}")
+
+    # .stApp block
+    css_parts.append(".stApp {")
+    css_parts.append("    background:")
+    css_parts.append("        linear-gradient(135deg, rgba(" + gradient_rgb + ",.12), transparent 28rem),")
+    css_parts.append("        linear-gradient(180deg, " + surface_soft + " 0%, #eef2f7 100%);")
+    css_parts.append("    color: var(--ink);")
+    css_parts.append("    font-family: Inter, \"Segoe UI\", system-ui, -apple-system, sans-serif;")
+    css_parts.append("}")
+
+    # .block-container
+    css_parts.append(".block-container { padding-top: 1.3rem; padding-bottom: 2.4rem; max-width: 1480px; }")
+
+    # [data-testid="stSidebar"]
+    css_parts.append('[data-testid="stSidebar"] {')
+    css_parts.append("    background: linear-gradient(180deg, " + sidebar_from + " 0%, " + sidebar_to + " 100%);")
+    css_parts.append("    color: #fff;")
+    css_parts.append("    border-right: 1px solid rgba(255,255,255,.08);")
+    css_parts.append("}")
+    css_parts.append('[data-testid="stSidebar"] * { color: inherit; }')
+
+    # [data-testid="stSidebar"] [data-testid="stFileUploader"]
+    css_parts.append('[data-testid="stSidebar"] [data-testid="stFileUploader"] {')
+    css_parts.append("    border: 1px solid rgba(255,255,255,.24);")
+    css_parts.append("    background: rgba(255,255,255,.08);")
+    css_parts.append("    border-radius: 8px;")
+    css_parts.append("    padding: .55rem;")
+    css_parts.append("    color: #fff;")
+    css_parts.append("}")
+    css_parts.append('[data-testid="stSidebar"] [data-testid="stFileUploader"] div,')
+    css_parts.append('[data-testid="stSidebar"] [data-testid="stFileUploader"] span,')
+    css_parts.append('[data-testid="stSidebar"] [data-testid="stFileUploader"] label {')
+    css_parts.append("    color: #fff !important;")
+    css_parts.append("    font-weight: 500;")
+    css_parts.append("}")
+
+    # .hero
+    css_parts.append(".hero { padding: 1.3rem 0 1.05rem; border-bottom: 1px solid rgba(148,163,184,.22); margin-bottom: .4rem; }")
+    css_parts.append(".hero h1 { font-size: clamp(2rem, 4vw, 3.4rem); line-height: 1.05; margin: 0; color: var(--ink); }")
+    css_parts.append(".hero p { color: var(--muted); font-size: 1.05rem; margin-top: .65rem; max-width: 58rem; }")
+
+    # .dashboard-banner
+    css_parts.append(".dashboard-banner {")
+    css_parts.append("    background: linear-gradient(135deg, " + accent + " 0%, " + accent_dark + " 100%);")
+    css_parts.append("    color: #fff;")
+    css_parts.append("    border-radius: 12px;")
+    css_parts.append("    padding: 1.1rem 1.35rem;")
+    css_parts.append("    margin-bottom: 1.1rem;")
+    css_parts.append("    box-shadow: 0 14px 36px rgba(" + gradient_rgb + ",.28);")
+    css_parts.append("}")
+    css_parts.append(".dashboard-banner h3 { margin: 0; font-size: 1.35rem; font-weight: 750; color: #fff; }")
+    css_parts.append(".dashboard-banner p { margin: .35rem 0 0; font-size: .92rem; color: rgba(255,255,255,.88); }")
+
+    # .metric-card
+    css_parts.append(".metric_card {")
+    css_parts.append("    border: 1px solid var(--card-border);")
+    css_parts.append("    background: var(--card-bg);")
+    css_parts.append("    border-radius: 12px;")
+    css_parts.append("    padding: 1rem 1.1rem;")
+    css_parts.append("    box-shadow: 0 12px 32px rgba(15,23,42,.08);")
+    css_parts.append("    min-height: 112px;")
+    css_parts.append("    transition: transform .15s ease, box-shadow .15s ease;")
+    css_parts.append("}")
+    css_parts.append(".metric_card:hover {")
+    css_parts.append("    transform: translateY(-2px);")
+    css_parts.append("    box-shadow: 0 16px 40px rgba(15,23,42,.12);")
+    css_parts.append("}")
+    css_parts.append(".metric_card .label { color: var(--muted); font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; }")
+    css_parts.append(".metric_card .value { color: var(--ink); font-size: 1.85rem; font-weight: 700; margin-top: .3rem; overflow-wrap: anywhere; }")
+    css_parts.append(".metric_card .note { color: var(--muted); font-size: .9rem; margin-top: .2rem; }")
+
+    # .chart-accent-bar
+    css_parts.append(".chart-accent-bar {")
+    css_parts.append("    height: 5px;")
+    css_parts.append("    border-radius: 10px 10px 0 0;")
+    css_parts.append("    margin-top: .65rem;")
+    css_parts.append("}")
+
+    # div[data-testid="stPlotlyChart"]
+    css_parts.append('div[data-testid="stPlotlyChart"] {')
+    css_parts.append("    border: 1px solid rgba(148,163,184,.22);")
+    css_parts.append("    border-radius: 0 0 12px 12px;")
+    css_parts.append("    background: rgba(255,255,255,.95);")
+    css_parts.append("    padding: .25rem;")
+    css_parts.append("    margin-bottom: 1.1rem;")
+    css_parts.append("    box-shadow: 0 10px 28px rgba(15,23,42,.06);")
+    css_parts.append("}")
+
+    # .section-title
+    css_parts.append(".section-title { font-size: 1.35rem; font-weight: 760; margin: 1.55rem 0 .7rem; color: var(--ink); }")
+
+    # .insight
+    css_parts.append(".insight {")
+    css_parts.append("    border-left: 4px solid " + accent + ";")
+    css_parts.append("    background: rgba(255,255,255,.88);")
+    css_parts.append("    border-radius: 8px;")
+    css_parts.append("    padding: .8rem 1rem;")
+    css_parts.append("    margin-bottom: .65rem;")
+    css_parts.append("    color: #1d2939;")
+    css_parts.append("    box-shadow: 0 8px 24px rgba(15,23,42,.05);")
+    css_parts.append("}")
+
+    # .warning
+    css_parts.append(".warning { border-left-color: " + warning + "; }")
+
+    # div[data-testid="stDataFrame"]
+    css_parts.append('div[data-testid="stDataFrame"] {')
+    css_parts.append("    border: 1px solid rgba(148,163,184,.28);")
+    css_parts.append("    border-radius: 8px;")
+    css_parts.append("    overflow: hidden;")
+    css_parts.append("    box-shadow: 0 10px 26px rgba(15,23,42,.05);")
+    css_parts.append("}")
+
+    # .stTabs [data-baseweb="tab-list"]
+    css_parts.append('.stTabs [data-baseweb="tab-list"] {')
+    css_parts.append("    gap: .35rem;")
+    css_parts.append("    background: rgba(255,255,255,.78);")
+    css_parts.append("    border: 1px solid rgba(148,163,184,.24);")
+    css_parts.append("    border-radius: 8px;")
+    css_parts.append("    padding: .35rem;")
+    css_parts.append("}")
+
+    # .stTabs [data-baseweb="tab"]
+    css_parts.append('.stTabs [data-baseweb="tab"] {')
+    css_parts.append("    border-radius: 7px; color: #475569; font-weight: 650; padding: .6rem .85rem;")
+    css_parts.append("}")
+
+    # .stTabs [aria-selected="true"]
+    css_parts.append('.stTabs [aria-selected="true"] {')
+    css_parts.append("    background: " + sidebar_from + "; color: #ffffff;")
+    css_parts.append("}")
+
+    # div[data-testid="stFileUploader"]
+    css_parts.append('div[data-testid="stFileUploader"] {')
+    css_parts.append("    background: rgba(255,255,255,.92);")
+
+
+# ---------------------------------------------------------------------------
+# Streamlit UI helpers (restored from v2 for app.py imports)
+# ---------------------------------------------------------------------------
+
+def render_card(label, value, note="", accent="#2563eb"):
+    """Render a single KPI metric card with a themed accent stripe."""
+    import html as html_lib
+    css = (
+        '<div style="border:1px solid #e2e8f0;border-top:4px solid ' + accent + ';'
+        'border-radius:12px;padding:14px 16px;background:#fff;'
+        'box-shadow:0 8px 22px rgba(15,23,42,.07);'
+        'font-family:Inter,Segoe UI,system-ui,sans-serif;">'
+        '<div style="color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.08em;">'
+        + html_lib.escape(label) + '</div>'
+        '<div style="color:#111827;font-size:26px;font-weight:700;margin-top:6px;">'
+        + html_lib.escape(value) + '</div>'
+        '<div style="color:#64748b;font-size:12px;margin-top:4px;">'
+        + html_lib.escape(note) + '</div></div>'
+    )
+    st.markdown(css, unsafe_allow_html=True)
+
+
+def render_metric_cards(kpis, theme=None):
+    """Render a responsive grid of KPI cards using the client color palette."""
+    theme = theme or get_default_theme()
+    palette = theme["palette"]
+    cols = st.columns(min(4, max(1, len(kpis))))
+    for idx, (label, metric) in enumerate(kpis.items()):
+        with cols[idx % len(cols)]:
+            render_card(label, metric["value"], metric.get("note", ""), palette[idx % len(palette)])
+
+
+def render_dashboard_banner(theme, theme_name, branding=None):
+    """Dashboard header with client logo, name, and active color theme."""
+    branding = branding or {}
+    company = branding.get("company_name") or "Client Dashboard"
+    accent, accent_dark = theme["accent"], theme["accent_dark"]
+
+    logo_tag = ""
+    logo_bytes = branding.get("logo_bytes")
+    if logo_bytes:
+        ext = (branding.get("logo_name") or "logo.png").split(".")[-1].lower()
+        mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(ext, "image/png")
+        import base64
+        b64 = base64.b64encode(logo_bytes).decode()
+        logo_tag = (
+            '<img src="data:' + mime + ';base64,' + b64 + '" alt="logo" '
+            'style="height:54px;max-width:120px;object-fit:contain;'
+            'background:rgba(255,255,255,.18);border-radius:8px;padding:6px;'
+            '"/>'
+        )
+
+    html = (
+        '<div style="display:flex;align-items:center;gap:14px;'
+        'background:linear-gradient(135deg,' + accent + ' 0%,' + accent_dark + ' 100%);'
+        'border-radius:12px;padding:16px 20px;'
+        'box-shadow:0 12px 30px rgba(0,0,0,.15);font-family:Inter,Segoe UI,system-ui,sans-serif;">'
+        + logo_tag +
+        '<div>'
+        '<h3 style="margin:0;color:#fff;font-size:20px;font-weight:700;">' + html.escape(company) + '</h3>'
+        '<p style="margin:8px 0 0;color:rgba(255,255,255,.92);font-size:14px;line-height:1.45;">'
+        'Theme: <strong>' + html.escape(theme_name) + '</strong> &nbsp;|&nbsp; '
+        'Branded dashboard - change colors or logo anytime from the sidebar.</p>'
+        '</div></div>'
+    )
+    st.markdown(html, height=108 if logo_bytes else 96, unsafe_allow_html=True)
+
+
+def render_charts(charts, theme=None, two_column=True):
+    """Render charts with themed accent bars; optional two-column layout."""
+    if not charts:
+        st.warning("No valid chart combinations were detected for this dataset.")
+        return
+    theme = theme or get_default_theme()
+    palette = theme["palette"]
+
+    def _draw(chart, accent, index):
+        st.markdown('<div style="height:5px;background:' + accent + ';border-radius:6px 6px 0 0;"></div>', height=12)
+        st.plotly_chart(chart, use_container_width=True, key="plotly_" + str(index) + "_" + chart.title.replace(" ", "_"))
+
+    if not two_column:
+        for idx, chart in enumerate(charts):
+            _draw(chart, palette[idx % len(palette)], idx)
+        return
+
+    for i in range(0, len(charts), 2):
+        pair = charts[i : i + 2]
+        cols = st.columns(2 if len(pair) == 2 else 1)
+        for j, chart in enumerate(pair):
+            idx = i + j
+            with cols[j]:
+                _draw(chart, palette[idx % len(palette)], idx)
+
+
+def select_client_branding():
+    """Ask client for company name, logo, and color scheme (preset or custom hex)."""
+    import os
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Client Branding")
+    st.sidebar.caption("Add the client's name, logo, and brand colors for a white-label dashboard.")
+
+    company_name = st.sidebar.text_input("Company / client name", placeholder="e.g. Acme Retail Ltd", key="client_company")
+    logo_file = st.sidebar.file_uploader("Company logo", type=["png", "jpg", "jpeg", "webp"], key="client_logo")
+    if logo_file is not None:
+        st.sidebar.image(logo_file, width=110, caption="Logo preview")
+
+    st.sidebar.markdown("**Color scheme**")
+    names = list(COLOR_THEMES.keys()) + ["Custom Brand Colors"]
+    choice = st.sidebar.selectbox("Color theme", names, key="client_color_theme")
+
+    if choice == "Custom Brand Colors":
+        pick_primary = st.sidebar.color_picker("Primary brand color", "#2563eb", key="pick_primary")
+        pick_secondary = st.sidebar.color_picker("Secondary color", "#0891b2", key="pick_secondary")
+        pick_tertiary = st.sidebar.color_picker("Third accent", "#059669", key="pick_tertiary")
+        with st.sidebar.expander("Or type hex codes manually"):
+            hex_primary = st.text_input("Primary hex", pick_primary, placeholder="#2563eb", key="hex_primary")
+            hex_secondary = st.text_input("Secondary hex", pick_secondary, placeholder="#0891b2", key="hex_secondary")
+            hex_tertiary = st.text_input("Third hex", pick_tertiary, placeholder="#059669", key="hex_tertiary")
+        from dashboard import build_custom_theme
+        import re
+        theme = build_custom_theme(
+            re.match(r"#[0-9A-Fa-f]{6}", hex_primary) or hex_primary,
+            re.match(r"#[0-9A-Fa-f]{6}", hex_secondary) or hex_secondary,
+            re.match(r"#[0-9A-Fa-f]{6}", hex_tertiary) or hex_tertiary,
+        )
+        theme_label = "Custom (" + theme["accent"] + ")"
+    else:
+        theme = COLOR_THEMES[choice]
+        theme_label = choice
+
+    st.sidebar.markdown(
+        '<div style="margin:.35rem 0 .85rem;">' + _theme_swatches(theme) + '</div>'
+        '<div style="font-size:.78rem;color:#94a3b8;">Primary: ' + theme["accent"] + '</div>',
+        unsafe_allow_html=True,
+    )
+
+    branding = {
+        "company_name": company_name.strip() or "Client Dashboard",
+        "logo_bytes": logo_file.getvalue() if logo_file is not None else None,
+        "logo_name": logo_file.name if logo_file is not None else "",
+    }
+    display_name = company_name.strip() or theme_label
+    return theme, display_name, branding
+
+
+def _theme_swatches(theme):
+    palette = theme["palette"]
+    return "".join(
+        '<span title="' + c + '" style="display:inline-block;width:30px;height:30px;border-radius:8px;'
+        'background:' + c + ';margin-right:6px;border:2px solid rgba(255,255,255,.9);'
+        'box-shadow:0 2px 6px rgba(0,0,0,.15);"></span>'
+        for c in palette[:5]
+    )
