@@ -930,20 +930,22 @@ def render_dashboard_banner(theme, theme_name, branding=None):
             '"/>'
         )
 
-    html = (
+    import html as html_lib
+
+    banner_html = (
         '<div style="display:flex;align-items:center;gap:14px;'
         'background:linear-gradient(135deg,' + accent + ' 0%,' + accent_dark + ' 100%);'
         'border-radius:12px;padding:16px 20px;'
         'box-shadow:0 12px 30px rgba(0,0,0,.15);font-family:Inter,Segoe UI,system-ui,sans-serif;">'
         + logo_tag +
         '<div>'
-        '<h3 style="margin:0;color:#fff;font-size:20px;font-weight:700;">' + html.escape(company) + '</h3>'
+        '<h3 style="margin:0;color:#fff;font-size:20px;font-weight:700;">' + html_lib.escape(company) + '</h3>'
         '<p style="margin:8px 0 0;color:rgba(255,255,255,.92);font-size:14px;line-height:1.45;">'
-        'Theme: <strong>' + html.escape(theme_name) + '</strong> &nbsp;|&nbsp; '
+        'Theme: <strong>' + html_lib.escape(theme_name) + '</strong> &nbsp;|&nbsp; '
         'Branded dashboard - change colors or logo anytime from the sidebar.</p>'
         '</div></div>'
     )
-    st.markdown(html, height=108 if logo_bytes else 96, unsafe_allow_html=True)
+    st.markdown(banner_html, height=108 if logo_bytes else 96, unsafe_allow_html=True)
 
 
 def render_charts(charts, theme=None, two_column=True):
