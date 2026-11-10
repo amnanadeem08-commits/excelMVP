@@ -4,9 +4,7 @@ numpy>=1.26.0
 plotly>=5.22.0
 openpyxl>=3.1.2
 xlrd>=2.0.1
-# kaleido >=1.5 required: 1.2.x breaks against choreographer 1.4 (chart export fails silently).
-# kaleido v1 renders charts with the locally installed Chrome/Edge.
-kaleido>=1.5.0
+matplotlib>=3.8.0  # browser-free static chart rendering for PDF/PPT exports
 reportlab>=4.2.0
 python-pptx>=0.6.23
 # Optional: enables LLM-written narratives in ai_insights.py when OPENAI_API_KEY is set.

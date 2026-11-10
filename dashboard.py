@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal
+
+import numpy as np
 import pandas as pd
 import streamlit as st
-
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 # COLOR_THEMES dict
@@ -184,6 +186,7 @@ def _valid_chart_kind(chart_kind_label: str) -> str:
         "histogram": "histogram",
         "scatter": "scatter",
         "heatmap": "heatmap",
+        "correlation heatmap": "heatmap",
         "pie / donut": "pie",
     }
     normalized = chart_kind_label.lower().strip()
@@ -199,6 +202,58 @@ class ChartSpec:
     title: str
     figure: object
     kind: str = ""
+
+
+def _normalize_chart_scalar(value):
+    """Convert pandas/NumPy values into stable Plotly/JSON scalar values."""
+    if value is None or value is pd.NaT or value is pd.NA:
+        return None
+    if isinstance(value, pd.Period):
+        return str(value)
+    if isinstance(value, pd.Timestamp):
+        return None if pd.isna(value) else value.to_pydatetime()
+    if isinstance(value, np.datetime64):
+        return _normalize_chart_scalar(pd.Timestamp(value))
+    if isinstance(value, (datetime, date, str, bool, int)):
+        return value
+    if isinstance(value, Decimal):
+        converted = float(value)
+        return converted if math.isfinite(converted) else None
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, np.generic):
+        converted = value.item()
+        if isinstance(converted, np.generic):
+            return _normalize_chart_scalar(float(value)) if np.issubdtype(value.dtype, np.number) else str(value)
+        return _normalize_chart_scalar(converted)
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return [_normalize_chart_scalar(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _normalize_chart_scalar(item) for key, item in value.items()}
+    # UUIDs and extension scalar types have a stable human-readable form.
+    return str(value)
+
+
+def normalize_chart_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy with every cell represented by a Plotly-safe scalar.
+
+    Valid numbers and timestamps retain their values. Missing and non-finite
+    values become nulls, Periods become strings, and unsupported scalar types
+    become readable strings rather than causing JSON encoding failures.
+    """
+    normalized = {}
+    for column in df.columns:
+        values = [_normalize_chart_scalar(value) for value in df[column].tolist()]
+        non_null = [value for value in values if value is not None]
+        if pd.api.types.is_numeric_dtype(df[column].dtype) or (
+            non_null and all(isinstance(value, (int, float, np.number)) and not isinstance(value, bool) for value in non_null)
+        ):
+            normalized[column] = pd.to_numeric(pd.Series(values, index=df.index), errors="coerce")
+        elif pd.api.types.is_datetime64_any_dtype(df[column].dtype):
+            normalized[column] = pd.Series(values, index=df.index, dtype=object)
+        else:
+            normalized[column] = pd.Series(values, index=df.index, dtype=object)
+    return pd.DataFrame(normalized, index=df.index)
 
 
 # Chart type labels (friendly names)
@@ -345,6 +400,9 @@ def generate_charts(
     Returns:
         A list of ChartSpec instances.
     """
+    df = normalize_chart_data(df)
+    if df.empty:
+        return []
     theme = theme or get_default_theme()
     palette = _build_palette(theme)
 
@@ -367,9 +425,10 @@ def generate_charts(
     # Line charts: trends over time.
     for date_col in datetime_cols[:2]:
         for measure in numeric_cols[:2]:
+            months = pd.to_datetime(df[date_col], errors="coerce").dt.to_period("M")
+            valid_dates = months.notna()
             monthly = (
-                df.assign(_month=pd.to_datetime(df[date_col], errors="coerce").dt.to_period("M").astype(str))
-                .dropna(subset=["_month"])
+                df.loc[valid_dates].assign(_month=months.loc[valid_dates].astype(str))
                 .groupby("_month", as_index=False)[measure]
                 .sum()
                 .sort_values("_month")
@@ -489,6 +548,9 @@ def build_custom_chart(
         ValueError: If the chart kind is unsupported, required columns are missing,
             or the chart type is not appropriate for the given columns.
     """
+    df = normalize_chart_data(df)
+    if df.empty:
+        raise ValueError("Cannot build a chart from an empty dataset.")
     theme = theme or get_default_theme()
     palette = _build_palette(theme)
     kind = _valid_chart_kind(chart_kind_label)
@@ -545,11 +607,11 @@ def build_custom_chart(
     if kind == "bar":
         if x_col is None and y_col is None:
             import plotly.express as px
-            fig = px.bar(df, title=title, color_discrete_sequence=palette)
+            fig = px.bar(x=["Records"], y=[len(df)], title=title, color_discrete_sequence=palette)
             fig.update_layout(title=dict(text=title, font=dict(size=17, color=theme["ink"])))
             if y_label is not None:
                 fig.update_layout(yaxis_title=y_label)
-            from dashboard import ChartSpec
+            return ChartSpec(title=title, figure=fig, kind="bar")
         elif y_col is None:
             # Count mode with X column
             title = f"Record Count by {x_col}" if title is None else title
@@ -558,8 +620,26 @@ def build_custom_chart(
             fig.update_layout(title=dict(text=title, font=dict(size=17, color=theme["ink"])))
             if y_label is not None:
                 fig.update_layout(yaxis_title=y_label)
-            from dashboard import ChartSpec
             return ChartSpec(title=title, figure=fig, kind="bar")
+        elif x_col is not None and y_col is not None:
+            if column_types is not None and y_col not in (
+                column_types.get("numeric", [])
+                + column_types.get("currency", [])
+                + column_types.get("percentage", [])
+            ):
+                raise ValueError("Bar chart requires a numeric Y column")
+            if agg not in {"sum", "mean", "median", "count"}:
+                raise ValueError(f"Unsupported aggregation: {agg}")
+            grouped = df.groupby(x_col, dropna=False)[y_col]
+            aggregated = grouped.count() if agg == "count" else getattr(grouped, agg)()
+            aggregated = aggregated.rename(y_col).reset_index()
+            import plotly.express as px
+            fig = px.bar(aggregated, x=x_col, y=y_col, title=title, color_discrete_sequence=palette)
+            fig.update_layout(title=dict(text=title, font=dict(size=17, color=theme["ink"])))
+            if x_label is not None:
+                fig.update_layout(xaxis_title=x_label)
+            if y_label is not None:
+                fig.update_layout(yaxis_title=y_label)
             return ChartSpec(title=title, figure=fig, kind="bar")
         elif y_col is not None and y_col in all_cols:
             import plotly.express as px
@@ -567,60 +647,61 @@ def build_custom_chart(
             fig.update_layout(title=dict(text=title, font=dict(size=17, color=theme["ink"])))
             if y_label is not None:
                 fig.update_layout(yaxis_title=y_label)
-            from dashboard import ChartSpec
             return ChartSpec(title=title, figure=fig, kind="bar")
         else:
             raise ValueError("Bar chart requires a Y column or no columns for count chart")
 
     # ----- Line chart -----
     if kind == "line":
-        # Auto-detect column types if not provided
-        if column_types is None:
-            column_types = {"numeric": [], "currency": [], "percentage": [], "categorical": [], "datetime": [], "boolean": []}
-            for col in df.columns:
-                if col in ['Order ID', 'Order Date']:  # Simplified datetime detection
-                    column_types['datetime'].append(col)
-                elif col in ['Region', 'Product']:  # Categorical
-                    column_types['categorical'].append(col)
-                elif col in ['Revenue', 'Units']:  # Numeric
-                    column_types['numeric'].append(col)
-        
-        if x_col is not None and x_col in all_cols and y_col is not None and y_col in all_cols:
-            x_is_date = x_col in column_types.get("datetime", [])
-            x_is_numeric = x_col in column_types.get("numeric", []) + column_types.get("currency", []) + column_types.get("percentage", [])
-            if not (x_is_date or x_is_numeric):
-                raise ValueError("Line chart requires a date column or numeric X column")
-            import plotly.express as px
-            fig = px.line(df, x=x_col, y=y_col, title=title, color_discrete_sequence=palette)
-            fig.update_layout(title=dict(text=title, font=dict(size=17, color=theme["ink"])))
-            if y_label is not None:
-                fig.update_layout(yaxis_title=y_label)
-            from dashboard import ChartSpec
-            return ChartSpec(title=title, figure=fig, kind="line")
-        else:
+        if x_col is None or y_col is None:
             raise ValueError("Line chart requires both X and Y columns")
-        if x_col is not None and x_col in all_cols:
-            if column_types is not None:
-                x_is_date = x_col in column_types.get("datetime", [])
-                x_is_numeric = x_col in column_types.get("numeric", []) + column_types.get("currency", []) + column_types.get("percentage", [])
-            if not (x_is_date or x_is_numeric):
-                raise ValueError("Line chart requires a date column or numeric X column")
+        date_cols = column_types.get("datetime", []) if column_types else []
+        numeric_cols = (
+            column_types.get("numeric", [])
+            + column_types.get("currency", [])
+            + column_types.get("percentage", [])
+            if column_types else []
+        )
+        x_values = df[x_col].dropna()
+        inferred_date = bool(len(x_values) and isinstance(x_values.iloc[0], (datetime, date)))
+        x_is_date = x_col in date_cols or inferred_date
+        x_is_numeric = x_col in numeric_cols or pd.api.types.is_numeric_dtype(df[x_col])
+        if not (x_is_date or x_is_numeric):
+            raise ValueError("Line chart requires a date column or numeric X column")
+        if not pd.api.types.is_numeric_dtype(df[y_col]):
+            raise ValueError("Line chart requires a numeric Y column")
+        if agg not in {"sum", "mean", "median", "count"}:
+            raise ValueError(f"Unsupported aggregation: {agg}")
+        grouped = df.groupby(x_col, dropna=False)[y_col]
+        line_data = grouped.count() if agg == "count" else getattr(grouped, agg)()
+        line_data = line_data.rename(y_col).reset_index().sort_values(x_col)
+        import plotly.express as px
+        fig = px.line(line_data, x=x_col, y=y_col, title=title, color_discrete_sequence=palette)
+        fig.update_layout(title=dict(text=title, font=dict(size=17, color=theme["ink"])))
+        if x_label is not None:
+            fig.update_layout(xaxis_title=x_label)
+        if y_label is not None:
+            fig.update_layout(yaxis_title=y_label)
+        return ChartSpec(title=title, figure=fig, kind="line")
 
     # ----- Pie chart -----
     if kind == "pie":
         if x_col is not None and x_col in all_cols and y_col is not None and y_col in all_cols:
-            aggregated = df.groupby(x_col, as_index=False)[y_col].sum()
+            if agg not in {"sum", "mean", "median", "count"}:
+                raise ValueError(f"Unsupported aggregation: {agg}")
+            grouped = df.groupby(x_col, dropna=False)[y_col]
+            aggregated = grouped.count() if agg == "count" else getattr(grouped, agg)()
+            aggregated = aggregated.rename(y_col).reset_index()
             if len(aggregated) > 8:
                 raise ValueError("8 segments or fewer")
             numeric_for_pie = column_types.get("numeric", []) + column_types.get("currency", []) + column_types.get("percentage", []) if column_types else []
-            if y_col not in numeric_for_pie:
+            if y_col not in numeric_for_pie and not pd.api.types.is_numeric_dtype(df[y_col]):
                 raise ValueError("Pie chart requires a numeric Y column")
             import plotly.express as px
             fig = px.pie(aggregated, names=x_col, values=y_col, hole=0.42, title=title, color_discrete_sequence=palette)
             fig.update_layout(title=dict(text=title, font=dict(size=17, color=theme["ink"])))
             if y_label is not None:
                 fig.update_layout(yaxis_title=y_label)
-            from dashboard import ChartSpec
             return ChartSpec(title=title, figure=fig, kind="pie")
         else:
             raise ValueError("Pie chart requires X and Y columns")
@@ -636,43 +717,42 @@ def build_custom_chart(
             fig.update_layout(title=dict(text=title, font=dict(size=17, color=theme["ink"])))
             if y_label is not None:
                 fig.update_layout(yaxis_title=y_label)
-            from dashboard import ChartSpec
             return ChartSpec(title=title, figure=fig, kind="histogram")
         else:
             raise ValueError("Histogram requires a numeric X column")
 
     # ----- Scatter chart -----
     if kind == "scatter":
-        if x_col is not None and x_col in all_cols and y_col is not None and y_col in all_cols:
-            if column_types is not None:
-                if y_col not in column_types.get("numeric", []) + column_types.get("currency", []) + column_types.get("percentage", []):
-                    raise ValueError("Scatter chart requires a numeric Y column")
-            import plotly.express as px
-            fig = px.scatter(df, x=x_col, y=y_col, title=title, color_discrete_sequence=palette)
-            fig.update_traces(marker=dict(color=theme['accent'], opacity=0.65, size=7))
-            fig.update_layout(title=dict(text=title, font=dict(size=17, color=theme['ink'])))
-            if y_label is not None:
-                fig.update_layout(yaxis_title=y_label)
-            from dashboard import ChartSpec
-            return ChartSpec(title=title, figure=fig, kind="scatter")
-        elif y_col is None:
-            raise ValueError("both an X and a Y")
-        else:
-            raise ValueError("Scatter chart requires both X and Y columns")
-            fig = px.scatter(df, x=x_col, y=y_col, title=title, color_discrete_sequence=palette)
-            fig.update_traces(marker=dict(color=theme["accent"], opacity=0.65, size=7))
-            fig.update_layout(title=dict(text=title, font=dict(size=17, color=theme["ink"])))
-            if y_label is not None:
-                fig.update_layout(yaxis_title=y_label)
-            from dashboard import ChartSpec
-            return ChartSpec(title=title, figure=fig, kind="scatter")
-        if y_col is not None and y_col in all_cols:
-            if column_types is not None and y_col not in column_types.get("numeric", []) + column_types.get("currency", []) + column_types.get("percentage", []):
-                raise ValueError("Scatter chart requires a numeric Y column")
+        if x_col is None or y_col is None:
+            raise ValueError("Scatter chart requires both an X and a Y column")
+        numeric_cols = (
+            column_types.get("numeric", [])
+            + column_types.get("currency", [])
+            + column_types.get("percentage", [])
+            if column_types else []
+        )
+        if y_col not in numeric_cols and not pd.api.types.is_numeric_dtype(df[y_col]):
+            raise ValueError("Scatter chart requires a numeric Y column")
+        import plotly.express as px
+        fig = px.scatter(df, x=x_col, y=y_col, title=title, color_discrete_sequence=palette)
+        fig.update_traces(marker=dict(color=theme['accent'], opacity=0.65, size=7))
+        fig.update_layout(title=dict(text=title, font=dict(size=17, color=theme['ink'])))
+        if x_label is not None:
+            fig.update_layout(xaxis_title=x_label)
+        if y_label is not None:
+            fig.update_layout(yaxis_title=y_label)
+        return ChartSpec(title=title, figure=fig, kind="scatter")
 
     # ----- Heatmap chart -----
     if kind == "heatmap":
-        numeric_for_heatmap = column_types.get("numeric", []) + column_types.get("currency", []) + column_types.get("percentage", []) if column_types else []
+        numeric_for_heatmap = (
+            column_types.get("numeric", [])
+            + column_types.get("currency", [])
+            + column_types.get("percentage", [])
+            if column_types else [
+                column for column in df.columns if pd.api.types.is_numeric_dtype(df[column])
+            ]
+        )
         if len(numeric_for_heatmap) < 3:
             raise ValueError("Heatmap requires at least 3 numeric columns")
         corr = df[numeric_for_heatmap[:12]].corr(numeric_only=True)
@@ -680,7 +760,6 @@ def build_custom_chart(
         fig = px.imshow(corr, text_auto=".2f", aspect="auto",
             color_continuous_scale=["#e0f2fe", "#d97706", "#c2410c"], title=title)
         fig.update_layout(title=dict(text=title, font=dict(size=17, color=theme["ink"])))
-        from dashboard import ChartSpec
         return ChartSpec(title=title, figure=fig, kind="heatmap")
 
     raise ValueError(f"Unsupported chart kind: {kind}")
@@ -696,7 +775,7 @@ def filter_dataframe(df: pd.DataFrame, column_types: dict[str, list[str]]) -> pd
         selected = st.sidebar.multiselect(
             f"{column}", options=values, default=values, key=f"filter_{column}"
         )
-        filtered = filtered[filtered[column].isin(selected)]
+        filtered = filtered[filtered[column].map(str).isin(selected)]
 
     datetime = column_types.get("datetime", [])
     for column in datetime[:2]:
@@ -704,7 +783,7 @@ def filter_dataframe(df: pd.DataFrame, column_types: dict[str, list[str]]) -> pd
         selected = st.sidebar.multiselect(
             f"{column}", options=values, default=values, key=f"filter_{column}_date"
         )
-        filtered = filtered[filtered[column].isin(selected)]
+        filtered = filtered[filtered[column].map(str).isin(selected)]
     return filtered
 
 # ---------------------------------------------------------------------------
@@ -724,15 +803,17 @@ def inject_styles(theme=None):
     muted = theme["muted"]
     success = theme["success"]
     warning = theme["warning"]
+    surface = theme.get("surface", "#ffffff")
+    card_bg = theme.get("card_bg", "rgba(255,255,255,.94)")
 
     css_parts = []
     css_parts.append("<style>")
 
     # :root block
     css_parts.append(":root {")
-    css_parts.append("--surface: #ffffff;")
+    css_parts.append("--surface: " + surface + ";")
     css_parts.append("--surface-soft: " + surface_soft + ";")
-    css_parts.append("--card-bg: rgba(255,255,255,.94);")
+    css_parts.append("--card-bg: " + card_bg + ";")
     css_parts.append("--card-border: rgba(148, 163, 184, .28);")
     css_parts.append("--ink: " + ink + ";")
     css_parts.append("--muted: " + muted + ";")
@@ -876,6 +957,11 @@ def inject_styles(theme=None):
     # div[data-testid="stFileUploader"]
     css_parts.append('div[data-testid="stFileUploader"] {')
     css_parts.append("    background: rgba(255,255,255,.92);")
+    css_parts.append("}")
+    css_parts.append("</style>")
+    css = "\n".join(css_parts)
+    st.markdown(css, unsafe_allow_html=True)
+    return css
 
 
 # ---------------------------------------------------------------------------
@@ -976,7 +1062,6 @@ def render_charts(charts, theme=None, two_column=True):
 
 def select_client_branding():
     """Ask client for company name, logo, and color scheme (preset or custom hex)."""
-    import os
     st.sidebar.markdown("---")
     st.sidebar.subheader("Client Branding")
     st.sidebar.caption("Add the client's name, logo, and brand colors for a white-label dashboard.")

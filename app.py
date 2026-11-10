@@ -37,6 +37,7 @@ from data_loader import list_sheets, normalize_headers, read_uploaded_file, sele
 from export_module import (
     dataframe_to_csv,
     dataframe_to_excel,
+    export_chart_images,
     export_summary_report,
     make_custom_pdf_report,
     make_ppt_report,
@@ -86,8 +87,6 @@ def _get_upload():
 
 
 def main() -> None:
-    inject_styles()
-
     st.title("Excel Automation & AI Reporting Tool")
     st.caption(
         "Upload a spreadsheet to automatically clean the data, generate pivot-table "
@@ -121,20 +120,6 @@ def main() -> None:
     cleaned_df, cleaning_report = clean_data(raw_df)
     column_types = detect_column_types(cleaned_df)
     filtered_df = filter_dataframe(cleaned_df, column_types)
-
-    # --- Apply transformation steps (deferred to Data Tools tab) ---
-    # Transformations are applied after column selection in the Data Tools tab.
-    # For now, use filtered_df as the base dataframe.
-    transformed_df = filtered_df
-    applied_labels = []
-    errors = []
-
-    summary = analyze_dataset(transformed_df, column_types)
-    kpis = build_kpis(transformed_df, summary, column_types)
-    pivots = generate_pivot_tables(transformed_df, column_types)
-    charts = generate_charts(transformed_df, column_types, theme)
-    ai = generate_ai_insights(transformed_df, column_types)
-    insights, recommendations = ai["key_insights"], ai["recommendations"]
 
     tabs = st.tabs(
         ["Dataset", "Data Tools", "Executive Summary", "Dashboard", "Pivot Tables", "AI Insights", "Downloads"]
@@ -204,7 +189,6 @@ def main() -> None:
         # Apply column selection: filter both raw and cleaned dataframes
         # Preserve the original uploaded dataset; do not mutate it
         selected_columns_set = set(selected)
-        filtered_raw = raw_df[[col for col in raw_df.columns if col in selected_columns_set]].copy() if selected else raw_df.head(0)
         filtered_cleaned = cleaned_df[[col for col in cleaned_df.columns if col in selected_columns_set]].copy() if selected else cleaned_df.head(0)
         # cleaned_selected is the cleaned data with selected columns, used in transformation step config
         cleaned_selected = filtered_cleaned.copy()
@@ -315,34 +299,22 @@ def main() -> None:
                 st.session_state.transform_steps = []
                 st.rerun()
 
-        # --- Apply transformations ---
-        # Ensure cleaned_selected is always defined before use
-        if selected and len(st.session_state.get("selected_columns", [])) > 0:
-            selected_columns_set = set(st.session_state.get("selected_columns", []))
-            cleaned_selected = cleaned_df[[col for col in cleaned_df.columns if col in selected_columns_set]].copy()
+        # Preview the same selected, filtered and transformed data used by analytics.
+        selected_columns_set = set(selected)
+        preview_base = (
+            filtered_df[[col for col in filtered_df.columns if col in selected_columns_set]].copy()
+            if selected_columns_set else filtered_df.head(0).copy()
+        )
+        if st.session_state.transform_steps:
+            preview_df, _, preview_errors = apply_transforms(preview_base, st.session_state.transform_steps)
+            if preview_errors:
+                st.warning("Transformation preview: " + " ".join(preview_errors))
         else:
-            cleaned_selected = pd.DataFrame()
-        
-        if selected and st.session_state.transform_steps:
-            try:
-                transformed_selected, applied_labels, errors = apply_transforms(cleaned_selected, st.session_state.transform_steps)
-            except Exception as e:
-                st.error(f"Transformation error: {e}. Showing untransformed data.")
-                transformed_selected = cleaned_selected
-                applied_labels = []
-                errors = []
-        elif selected:
-            transformed_selected = cleaned_selected
-            applied_labels = []
-            errors = []
-        else:
-            # Empty selection - use empty dataframes
-            raw_selected = pd.DataFrame()
-            cleaned_selected = pd.DataFrame()
-            column_types_selected = detect_column_types(raw_selected) if raw_selected is not None else {}
-            transformed_selected = pd.DataFrame()
-            applied_labels = []
-            errors = []    # --- Propagate transformations to main pipeline ---
+            preview_df = preview_base
+        st.subheader("Transformed Data Preview")
+        st.dataframe(preview_df.head(150), use_container_width=True)
+
+    # --- Propagate transformations to the analytics pipeline ---
     # Compute filtered_selected: preserves BOTH sidebar filters and column selection
     selected_columns_set = set(st.session_state.get("selected_columns", []))
     if selected_columns_set:
@@ -354,14 +326,33 @@ def main() -> None:
     # Apply transformation steps if configured, overriding the base transformed_df
     if "transform_steps" in st.session_state and st.session_state.transform_steps:
         try:
-            transformed_df, applied_labels, errors = apply_transforms(filtered_selected, st.session_state.transform_steps)
+            transformed_df, _, _ = apply_transforms(filtered_selected, st.session_state.transform_steps)
         except Exception as e:
             st.error(f"Transformation error: {e}. Showing untransformed data.")
             transformed_df = filtered_selected
-            applied_labels = []
-            errors = []
     else:
         transformed_df = filtered_selected
+
+    # All analytics and charts use the final selected, filtered, transformed
+    # dataset. Cleaning diagnostics continue to describe the original upload.
+    column_types = detect_column_types(transformed_df)
+    summary = analyze_dataset(transformed_df, column_types)
+    measures = (
+        column_types.get("numeric", [])
+        + column_types.get("currency", [])
+        + column_types.get("percentage", [])
+    )
+    with st.sidebar:
+        st.subheader("KPI Options")
+        kpi_metric = st.selectbox("KPI metric", options=measures or [None], key="kpi_metric")
+        kpi_agg = st.selectbox("KPI aggregation", options=["sum", "mean", "median"], key="kpi_agg")
+    kpis = build_kpis(
+        transformed_df, summary, column_types, measure=kpi_metric, agg=kpi_agg
+    )
+    pivots = generate_pivot_tables(transformed_df, column_types)
+    charts = generate_charts(transformed_df, column_types, theme)
+    ai = generate_ai_insights(transformed_df, column_types)
+    insights, recommendations = ai["key_insights"], ai["recommendations"]
 
     with tabs[2]:
 
@@ -425,12 +416,10 @@ def main() -> None:
         
         # X and Y column selectors
         numeric_cols = column_types.get("numeric", []) + column_types.get("currency", []) + column_types.get("percentage", [])
-        categorical_cols = column_types.get("categorical", [])
-        datetime_cols = column_types.get("datetime", [])
         
         col1, col2 = st.columns(2)
         with col1:
-            x_col = st.selectbox("X Column", options=[None] + list(filtered_selected.columns), index=0)
+            x_col = st.selectbox("X Column", options=[None] + list(transformed_df.columns), index=0)
         with col2:
             y_col = st.selectbox("Y Column", options=[None] + numeric_cols, index=0)
         
@@ -449,14 +438,13 @@ def main() -> None:
             else:
                 try:
                     spec = build_custom_chart(
-                        df, chart_kind, x_col, y_col,
+                        transformed_df, chart_kind, x_col, y_col,
                         agg=agg,
                         theme=theme,
                         column_types=column_types,
                     )
                     st.success(f"Chart built: {spec.title}")
                     # Display the chart
-                    import plotly.express as px
                     fig = spec.figure
                     st.plotly_chart(fig, use_container_width=True)
                 except ValueError as e:
@@ -533,12 +521,19 @@ def main() -> None:
         excel_bytes = dataframe_to_excel(transformed_df, pivots)
         csv_bytes = dataframe_to_csv(transformed_df)
         summary_bytes = export_summary_report(summary, cleaning_report, kpis, insights, recommendations, pivots)
-        pdf_bytes = make_custom_pdf_report(
-            summary, cleaning_report, insights, recommendations, pivots, charts, include_tables, include_charts
-        )
-        ppt_bytes = make_ppt_report(
-            summary, cleaning_report, insights, recommendations, pivots, charts, include_tables, include_charts
-        )
+        pdf_bytes = ppt_bytes = None
+        try:
+            chart_images = export_chart_images(charts) if include_charts else []
+            pdf_bytes = make_custom_pdf_report(
+                summary, cleaning_report, insights, recommendations, pivots, charts,
+                include_tables, include_charts, chart_images=chart_images,
+            )
+            ppt_bytes = make_ppt_report(
+                summary, cleaning_report, insights, recommendations, pivots, charts,
+                include_tables, include_charts, chart_images=chart_images,
+            )
+        except Exception as exc:
+            st.error(f"Client report export failed: {exc}")
 
         st.markdown("**Data exports**")
         d1, d2, d3 = st.columns(3)
@@ -564,14 +559,20 @@ def main() -> None:
         st.markdown("**Client deliverables**")
         d4, d5 = st.columns(2)
         with d4:
-            st.download_button("Client PDF", pdf_bytes, file_name="client_analytics_report.pdf", mime="application/pdf")
+            if pdf_bytes is None:
+                st.caption("Client PDF unavailable because report generation failed.")
+            else:
+                st.download_button("Client PDF", pdf_bytes, file_name="client_analytics_report.pdf", mime="application/pdf")
         with d5:
-            st.download_button(
-                "Client PPT",
-                ppt_bytes,
-                file_name="client_analytics_deck.pptx",
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            )
+            if ppt_bytes is None:
+                st.caption("Client PPT unavailable because report generation failed.")
+            else:
+                st.download_button(
+                    "Client PPT",
+                    ppt_bytes,
+                    file_name="client_analytics_deck.pptx",
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                )
 
         st.caption("Choose whether the PDF/PPT deliverable includes pivot tables, charts, both, or summary only.")
 

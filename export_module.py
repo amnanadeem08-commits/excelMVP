@@ -14,8 +14,8 @@ CUSTOMIZE:
 from __future__ import annotations
 
 import html
+import math
 import re
-import tempfile
 from datetime import date
 from io import BytesIO
 from typing import Any
@@ -208,17 +208,94 @@ def export_summary_report(
 # Chart images
 # ---------------------------------------------------------------------------
 def export_chart_images(charts: list[Any]) -> list[dict[str, Any]]:
-    """Render Plotly charts to high-resolution PNG bytes (requires kaleido)."""
+    """Render supported Plotly charts to PNG without a browser process.
+
+    Kaleido 1.x can block while opening its loopback sync bridge on restricted
+    Windows hosts. The report path renders supported traces directly and
+    surfaces any rendering error rather than silently dropping a chart.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    def finite_pairs(labels, values):
+        pairs = []
+        for label, value in zip(labels, values):
+            if value is None:
+                continue
+            try:
+                if not math.isfinite(float(value)):
+                    continue
+            except (TypeError, ValueError):
+                continue
+            pairs.append(("(missing)" if label is None else label, value))
+        return pairs
+
     exported = []
     for chart in charts:
+        fig, ax = plt.subplots(figsize=(10, 5.8), constrained_layout=True)
         try:
-            image_bytes = chart.figure.to_image(format="png", width=1400, height=820, scale=2)
-            temp = tempfile.NamedTemporaryFile(prefix="excel_ai_chart_", suffix=".png", delete=False)
-            temp.write(image_bytes)
-            temp.close()
-            exported.append({"title": chart.title, "bytes": image_bytes, "path": temp.name})
-        except Exception:
-            continue
+            plotly_figure = chart.figure
+            for trace in plotly_figure.data:
+                kind = trace.type
+                if kind == "bar":
+                    values = list(trace.x) if trace.orientation == "h" and trace.x is not None else (
+                        list(trace.y) if trace.orientation != "h" and trace.y is not None else []
+                    )
+                    labels = list(trace.y) if trace.orientation == "h" and trace.y is not None else (
+                        list(trace.x) if trace.orientation != "h" and trace.x is not None else list(range(len(values)))
+                    )
+                    pairs = finite_pairs(labels, values)
+                    labels, values = [pair[0] for pair in pairs], [pair[1] for pair in pairs]
+                    if trace.orientation == "h":
+                        ax.barh(labels, values, color=getattr(trace.marker, "color", None))
+                    else:
+                        ax.bar(labels, values, color=getattr(trace.marker, "color", None))
+                        ax.tick_params(axis="x", labelrotation=30)
+                elif kind == "scatter":
+                    xs, ys = list(trace.x), list(trace.y)
+                    pairs = finite_pairs(xs, ys)
+                    xs, ys = [pair[0] for pair in pairs], [pair[1] for pair in pairs]
+                    if trace.mode and "lines" in trace.mode:
+                        ax.plot(xs, ys, marker="o", label=trace.name or None)
+                    else:
+                        ax.scatter(xs, ys, label=trace.name or None)
+                elif kind == "pie":
+                    pairs = finite_pairs(list(trace.labels), list(trace.values))
+                    ax.pie([pair[1] for pair in pairs], labels=[pair[0] for pair in pairs], autopct="%1.1f%%")
+                elif kind == "histogram":
+                    samples = [pair[1] for pair in finite_pairs(list(trace.x), list(trace.x))]
+                    ax.hist(samples, bins=35)
+                elif kind == "box":
+                    # Plotly Express adds this secondary trace for histogram
+                    # marginals; the histogram already represents its values.
+                    continue
+                elif kind == "heatmap":
+                    image = ax.imshow(trace.z, aspect="auto", cmap="RdYlBu_r", vmin=-1, vmax=1)
+                    if trace.x is not None:
+                        ax.set_xticks(range(len(trace.x)), labels=list(trace.x), rotation=30, ha="right")
+                    if trace.y is not None:
+                        ax.set_yticks(range(len(trace.y)), labels=list(trace.y))
+                    fig.colorbar(image, ax=ax)
+                else:
+                    raise ValueError(f"unsupported chart trace type '{kind}'")
+
+            layout = plotly_figure.layout
+            ax.set_title(chart.title)
+            if layout.xaxis.title.text:
+                ax.set_xlabel(layout.xaxis.title.text)
+            if layout.yaxis.title.text:
+                ax.set_ylabel(layout.yaxis.title.text)
+            image_buffer = BytesIO()
+            fig.savefig(image_buffer, format="png", dpi=160)
+            image_bytes = image_buffer.getvalue()
+            if not image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+                raise RuntimeError("renderer did not produce a valid PNG")
+            exported.append({"title": chart.title, "bytes": image_bytes})
+        except Exception as exc:
+            raise RuntimeError(f"Could not render chart '{chart.title}': {exc}") from exc
+        finally:
+            plt.close(fig)
     return exported
 
 
