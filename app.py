@@ -386,8 +386,88 @@ def main() -> None:
     with tabs[3]:
         render_dashboard_banner(theme, theme_name, branding)
         render_metric_cards(kpis, theme)
-        st.caption("Change the client color scheme anytime from the sidebar. Filters slice data by category and date.")
-        render_charts(charts, theme)
+        
+        # Chart guide
+        st.subheader("Chart Selection Guide")
+        st.caption("Choose the right chart type for your data")
+        chart_guide_df = pd.DataFrame(CHART_GUIDE)
+        st.dataframe(chart_guide_df, use_container_width=True, hide_index=True)
+        
+        # Chart type selection
+        st.subheader("Chart Type Selection")
+        available = available_chart_types(column_types)
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            selected_chart_types = st.multiselect(
+                "Select chart types to display",
+                options=available,
+                default=available,
+                help="Select which chart types to show based on your data's column types"
+            )
+        with col2:
+            st.caption(f"{len(selected_chart_types)} selected")
+        
+        # Custom chart builder
+        st.subheader("Custom Chart Builder")
+        st.caption("Build a custom chart with your chosen columns and aggregation")
+        
+        # Chart kind selector
+        chart_kind = st.selectbox(
+            "Chart Type",
+            options=list(CHART_TYPE_LABELS.keys()),
+            index=0,
+            help="Select the type of chart to build"
+        )
+        
+        # X and Y column selectors
+        numeric_cols = column_types.get("numeric", []) + column_types.get("currency", []) + column_types.get("percentage", [])
+        categorical_cols = column_types.get("categorical", [])
+        datetime_cols = column_types.get("datetime", [])
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            x_col = st.selectbox("X Column", options=[None] + list(df.columns), index=0)
+        with col2:
+            y_col = st.selectbox("Y Column", options=[None] + numeric_cols, index=0)
+        
+        # Aggregation selector
+        agg = st.selectbox(
+            "Aggregation",
+            options=["sum", "mean", "median", "count"],
+            index=0,
+            help="Aggregation function for bar/line charts"
+        )
+        
+        # Build chart button
+        if st.button("Build Custom Chart", type="primary"):
+            if x_col is None and y_col is None:
+                st.error("Please select at least an X column or Y column.")
+            else:
+                try:
+                    spec = build_custom_chart(
+                        df, chart_kind, x_col, y_col,
+                        agg=agg,
+                        theme=theme,
+                        column_types=column_types,
+                    )
+                    st.success(f"Chart built: {spec.title}")
+                    # Display the chart
+                    import plotly.express as px
+                    fig = spec.figure
+                    st.plotly_chart(fig, use_container_width=True)
+                except ValueError as e:
+                    st.error(f"Error building chart: {e}")
+        
+        # Show applicable chart types info
+        if selected_chart_types:
+            st.info(f"Based on your data columns, applicable chart types are: {', '.join(selected_chart_types)}")
+
+        # Render the default charts with filtered types
+        if selected_chart_types:
+            filtered_charts = [c for c in charts if c.kind in selected_chart_types]
+        else:
+            filtered_charts = charts
+        render_charts(filtered_charts, theme)
 
     # --- Tab 4: Pivot Tables ---
     with tabs[4]:
