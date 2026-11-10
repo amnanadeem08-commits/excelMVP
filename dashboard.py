@@ -21,7 +21,15 @@ COLOR_THEMES: dict[str, dict[str, str]] = {
         "surface_soft": "#e0f2fe",
         "accent_light": "#f6e05e",
         "accent_dark": "#c2410c",
+        "sidebar_from": "#0f172a",
+        "sidebar_to": "#111827",
+        "gradient_rgb": "37,99,235",
         "ink": "#1e293b",
+        "muted": "#64748b",
+        "surface_soft": "#e0f2fe",
+        "palette": ["#2563eb", "#0891b2", "#059669", "#d97706", "#7c3aed"],
+        "success": "#059669",
+        "warning": "#f59e0b",
     },
     "Light": {
         "primary": "#1d4ed8",
@@ -35,9 +43,134 @@ COLOR_THEMES: dict[str, dict[str, str]] = {
         "surface_soft": "#f1f5f9",
         "accent_light": "#fbbf24",
         "accent_dark": "#b45309",
+        "sidebar_from": "#1e293b",
+        "sidebar_to": "#f1f5f9",
+        "gradient_rgb": "29,78,216",
         "ink": "#0f172a",
+        "muted": "#64748b",
+        "surface_soft": "#f1f5f9",
+        "palette": ["#1d4ed8", "#0f172a", "#1e293b", "#f97316", "#fbbf24"],
+        "success": "#059669",
+        "warning": "#f59e0b",
+    },
+    "Dark": {
+        "accent": "#64748b",
+        "on_accent": "#f8fafc",
+        "accent_dark": "#475569",
+        "sidebar_from": "#0f172a",
+        "sidebar_to": "#1e293b",
+        "gradient_rgb": "100,116,139",
+        "ink": "#f1f5f9",
+        "muted": "#94a3b8",
+        "surface_soft": "#0f172a",
+        "palette": ["#64748b", "#475569", "#1e293b", "#3b82f6", "#a5f3fc"],
+        "success": "#10b981",
+        "warning": "#f59e0b",
+        "is_dark": True,
+        "surface": "#0f172a",
+        "card_bg": "#1e293b",
+        "paper_bg": "#0f172a",
+        "plot_bg": "#1e293b",
+    },
+    "Light Professional": {
+        "primary": "#2563eb",
+        "on_primary": "#ffffff",
+        "secondary": "#64748b",
+        "on_secondary": "#f8fafc",
+        "tertiary": "#a5f3fc",
+        "on_tertiary": "#0f172a",
+        "accent": "#d97706",
+        "on_accent": "#ffffff",
+        "accent_dark": "#c2410c",
+        "sidebar_from": "#0f172a",
+        "sidebar_to": "#1e293b",
+        "gradient_rgb": "37,99,235",
+        "ink": "#1e293b",
+        "muted": "#64748b",
+        "surface_soft": "#e0f2fe",
+        "palette": ["#2563eb", "#64748b", "#a5f3fc", "#d97706", "#f8fafc"],
+        "success": "#10b981",
+        "warning": "#f59e0b",
+    },
+    "Slate Minimal": {
+        "primary": "#64748b",
+        "on_primary": "#f8fafc",
+        "secondary": "#94a3b8",
+        "on_secondary": "#0f172a",
+        "tertiary": "#e2e8f0",
+        "on_tertiary": "#1e293b",
+        "accent": "#f6e05e",
+        "on_accent": "#1e293b",
+        "accent_dark": "#e4e6eb",
+        "sidebar_from": "#0f172a",
+        "sidebar_to": "#1e293b",
+        "gradient_rgb": "100,116,139",
+        "ink": "#f8fafc",
+        "muted": "#64748b",
+        "surface_soft": "#f1f5f9",
+        "palette": ["#64748b", "#94a3b8", "#e2e8f0", "#f6e05e", "#0f172a"],
+        "success": "#10b981",
+        "warning": "#f59e0b",
     },
 }
+
+import re
+
+def _normalize_hex(color: str) -> str | None:
+    """Return a valid #RRGGBB string or None."""
+    if not color:
+        return None
+    color = color.strip()
+    if re.fullmatch(r"#[0-9A-Fa-f]{6}", color):
+        return color.lower()
+    if re.fullmatch(r"[0-9A-Fa-f]{6}", color):
+        return f"#{color.lower()}"
+    if re.fullmatch(r"#[0-9A-Fa-f]{3}", color):
+        h = color[1:]
+        return f"#{h[0] * 2}{h[1] * 2}{h[2] * 2}".lower()
+    return None
+
+
+def _hex_to_rgb_tuple(hex_color: str) -> tuple[int, int, int]:
+    h = _normalize_hex(hex_color) or "#2563eb"
+    return int(h[1:3], 16), int(h[3:5], 16), int(h[5:7], 16)
+
+
+def _rgb_string(hex_color: str) -> str:
+    r, g, b = _hex_to_rgb_tuple(hex_color)
+    return f"{r},{g},{b}"
+
+
+def _darken_hex(hex_color: str, factor: float = 0.72) -> str:
+    r, g, b = _hex_to_rgb_tuple(hex_color)
+    return f"#{int(r * factor):02x}{int(g * factor):02x}{int(b * factor):02x}"
+
+
+def _lighten_hex(hex_color: str, factor: float = 0.28) -> str:
+    r, g, b = _hex_to_rgb_tuple(hex_color)
+    return f"#{int(r + (255 - r) * factor):02x}{int(g + (255 - g) * factor):02x}{int(b + (255 - b) * factor):02x}"
+
+
+def build_custom_theme(primary: str, secondary: str | None = None, tertiary: str | None = None) -> dict:
+    """Build a full theme dict from 1-3 client hex colors."""
+    primary = _normalize_hex(primary) or "#2563eb"
+    secondary = _normalize_hex(secondary) or _lighten_hex(primary, 0.35)
+    tertiary = _normalize_hex(tertiary) or _darken_hex(primary, 0.85)
+    accent_dark = _darken_hex(primary, 0.78)
+    return {
+        "accent": primary,
+        "accent_dark": accent_dark,
+        "sidebar_from": _darken_hex(primary, 0.32),
+        "sidebar_to": _darken_hex(primary, 0.48),
+        "gradient_rgb": _rgb_string(primary),
+        "ink": "#111827",
+        "muted": "#64748b",
+        "surface_soft": _lighten_hex(primary, 0.92),
+        "palette": [primary, secondary, tertiary, accent_dark, _lighten_hex(secondary, 0.4)],
+        "success": "#059669",
+        "warning": "#d97706",
+    }
+
 
 
 # Valid chart kinds mapping (case-insensitive)
@@ -244,7 +377,12 @@ def generate_charts(
             if len(monthly) >= 2:
                 import plotly.express as px
                 fig = px.line(monthly, x="_month", y=measure, title=title, color_discrete_sequence=palette)
-                fig.update_layout(title=dict(text=title, font=dict(size=17, color=theme["ink"])))
+                fig.update_layout(
+                    title=dict(text=title, font=dict(size=17, color=theme["ink"])),
+                    font=dict(color=theme["ink"]),
+                    paper_bgcolor=theme.get("paper_bg", "#ffffff"),
+                    plot_bgcolor=theme.get("plot_bg", "#ffffff"),
+                )
                 charts.append(ChartSpec(title=title, figure=fig, kind="line"))
 
     # Bar / pie charts: top categories (limit to 3 per chart for top_n compatibility).
@@ -264,10 +402,20 @@ def generate_charts(
                 aggregated = aggregated.sort_values(measure, ascending=True)
                 import plotly.express as px
                 fig = px.bar(aggregated, x=measure, y=cat, orientation="h", title=title, color_discrete_sequence=palette)
+                fig.update_layout(
+                    font=dict(color=theme["ink"]),
+                    paper_bgcolor=theme.get("paper_bg", "#ffffff"),
+                    plot_bgcolor=theme.get("plot_bg", "#ffffff"),
+                )
                 charts.append(ChartSpec(title=title, figure=fig, kind="bar"))
             else:
                 import plotly.express as px
                 fig = px.bar(aggregated, x=measure, y=cat, orientation="v", title=title, color_discrete_sequence=palette)
+                fig.update_layout(
+                    font=dict(color=theme["ink"]),
+                    paper_bgcolor=theme.get("paper_bg", "#ffffff"),
+                    plot_bgcolor=theme.get("plot_bg", "#ffffff"),
+                )
                 charts.append(ChartSpec(title=title, figure=fig, kind="bar"))
 
     # Heatmap: correlation across numeric measures (requires >= 3 numeric columns)
@@ -284,7 +432,12 @@ def generate_charts(
             color_continuous_scale=["#e0f2fe", "#d97706", "#c2410c"],
             title="Correlation Heatmap",
         )
-        fig.update_layout(title=dict(text="Correlation Heatmap", font=dict(size=17, color=theme["ink"])))
+        fig.update_layout(
+                    title=dict(text="Correlation Heatmap", font=dict(size=17, color=theme["ink"])),
+                    font=dict(color=theme["ink"]),
+                    paper_bgcolor=theme.get("paper_bg", "#ffffff"),
+                    plot_bgcolor=theme.get("plot_bg", "#ffffff"),
+                )
         charts.append(ChartSpec(title="Correlation Heatmap", figure=fig, kind="heatmap"))
 
     # Force chart_types filtering if specified
