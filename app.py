@@ -19,6 +19,7 @@ import streamlit as st
 from analytics_engine import analyze_dataset, build_kpis, generate_pivot_tables
 from ai_insights import generate_ai_insights
 from dashboard import (
+    CHART_GUIDE,
     filter_dataframe,
     generate_charts,
     inject_styles,
