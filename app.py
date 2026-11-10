@@ -430,7 +430,7 @@ def main() -> None:
         
         col1, col2 = st.columns(2)
         with col1:
-            x_col = st.selectbox("X Column", options=[None] + list(df.columns), index=0)
+            x_col = st.selectbox("X Column", options=[None] + list(filtered_selected.columns), index=0)
         with col2:
             y_col = st.selectbox("Y Column", options=[None] + numeric_cols, index=0)
         
