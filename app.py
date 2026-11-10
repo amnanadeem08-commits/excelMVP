@@ -21,6 +21,8 @@ from ai_insights import generate_ai_insights
 from dashboard import (
     CHART_GUIDE,
     available_chart_types,
+    CHART_TYPE_LABELS,
+    build_custom_chart,
     filter_dataframe,
     generate_charts,
     inject_styles,
