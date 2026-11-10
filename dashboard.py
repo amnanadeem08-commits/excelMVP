@@ -368,7 +368,7 @@ def generate_charts(
     for date_col in datetime_cols[:2]:
         for measure in numeric_cols[:2]:
             monthly = (
-                df.assign(_month=pd.to_datetime(df[date_col], errors="coerce").dt.to_period("M"))
+                df.assign(_month=pd.to_datetime(df[date_col], errors="coerce").dt.to_period("M").astype(str))
                 .dropna(subset=["_month"])
                 .groupby("_month", as_index=False)[measure]
                 .sum()
@@ -958,7 +958,7 @@ def render_charts(charts, theme=None, two_column=True):
 
     def _draw(chart, accent, index):
         st.markdown('<div style="height:12px;background:' + accent + ';border-radius:6px 6px 0 0;"></div>')
-        st.plotly_chart(chart, use_container_width=True, key="plotly_" + str(index) + "_" + chart.title.replace(" ", "_"))
+        st.plotly_chart(chart.figure, use_container_width=True, key="plotly_" + str(index) + "_" + chart.title.replace(" ", "_"))
 
     if not two_column:
         for idx, chart in enumerate(charts):
